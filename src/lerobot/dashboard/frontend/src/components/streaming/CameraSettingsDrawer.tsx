@@ -75,13 +75,11 @@ function SettingsPanel({
   });
 
   return (
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
     <div
       className={cn(
         "absolute right-0 top-9 z-50 w-64 rounded-md border bg-popover shadow-lg",
         "text-popover-foreground",
       )}
-      onClick={(e) => e.stopPropagation()}
       data-testid="camera-settings-panel"
     >
       <div className="flex items-center justify-between border-b px-3 py-2">
