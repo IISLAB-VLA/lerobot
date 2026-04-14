@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Sliders } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import {
@@ -135,6 +135,14 @@ export function RobotDetailPage(): JSX.Element {
         </div>
 
         <div className="flex items-center gap-2">
+          {import.meta.env.VITE_ENABLE_CALIBRATION === "1" ? (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/robots/${robot.id}/calibrate`}>
+                <Sliders className="h-4 w-4" aria-hidden />
+                Calibrate
+              </Link>
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             size="sm"
