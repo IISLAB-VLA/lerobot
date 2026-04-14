@@ -11,7 +11,6 @@ import { resolveWsUrl } from "@/lib/ws";
 import {
   benchmarkWsPath,
   isTerminalStatus,
-  type BenchmarkPreviewReadyEvent,
   type BenchmarkRunSummary,
   type BenchmarkServerEvent,
   type BenchmarkStepEvent,

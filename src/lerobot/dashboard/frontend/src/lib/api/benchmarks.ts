@@ -19,6 +19,11 @@ export interface BenchmarkInfo {
   config_type: string;
 }
 
+/** Narrow result type per robotics-integrator-3 RFC answer. */
+export interface BenchmarkRunResult {
+  episodes_completed: number;
+}
+
 export interface BenchmarkRunSummary {
   run_id: string;
   env_name: string;
@@ -34,7 +39,7 @@ export interface BenchmarkRunSummary {
   last_reward: number | null;
   started_at: string;
   completed_at: string | null;
-  result: Record<string, unknown> | null;
+  result: BenchmarkRunResult | null;
   error: { code: string; message: string } | null;
   storage_dir: string;
 }
