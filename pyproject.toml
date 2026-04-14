@@ -305,6 +305,7 @@ explicit = true
 asyncio_mode = "auto"
 markers = [
     "hardware: tests that require physical hardware (SO-101, cameras, etc.) — skipped in CI",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
 
 [tool.uv.sources]
