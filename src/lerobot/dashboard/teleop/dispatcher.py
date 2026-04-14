@@ -38,8 +38,13 @@ import time
 from typing import TYPE_CHECKING, Callable
 from uuid import UUID
 
+from typing import TYPE_CHECKING
+
 from lerobot.dashboard.services.robot_manager import RobotManagerProtocol
 from lerobot.dashboard.teleop.adapters.base import SourceState, TeleopEventSource
+
+if TYPE_CHECKING:
+    from lerobot.dashboard.services.teleop_manager import TeleopManagerProtocol
 from lerobot.dashboard.teleop.deadman import DeadmanStateMachine
 from lerobot.dashboard.teleop.protocol import TeleopEvent
 from lerobot.dashboard.teleop.validator import ActionValidationError, ActionValidator
@@ -61,7 +66,7 @@ class TeleopDispatcher:
         deadman: DeadmanStateMachine,
         *,
         clock: Callable[[], float] = time.monotonic,
-        teleop_manager: TeleopManagerProtocol | None = None,
+        teleop_manager: "TeleopManagerProtocol | None" = None,
         teleop_id: UUID | None = None,
     ) -> None:
         if (teleop_manager is None) ^ (teleop_id is None):

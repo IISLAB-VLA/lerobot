@@ -32,6 +32,8 @@ from lerobot.dashboard.services.recorder import (
     RecorderService,
 )
 
+from lerobot.dashboard.ws.teleop import build_teleop_ws_router
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,6 +61,7 @@ async def _safe_close(websocket: WebSocket, code: int = 1000) -> None:
 
 def build_ws_router() -> APIRouter:
     router = APIRouter(prefix="/ws")
+    router.include_router(build_teleop_ws_router())
 
     @router.websocket("/events")
     async def events(websocket: WebSocket) -> None:
