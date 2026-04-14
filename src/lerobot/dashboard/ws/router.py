@@ -24,6 +24,7 @@ from lerobot.dashboard.services.recorder import (
     RecorderService,
 )
 
+from lerobot.dashboard.services.benchmark import RunNotFoundError
 from lerobot.dashboard.services.calibration import SessionNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -102,5 +103,41 @@ def build_ws_router() -> APIRouter:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         except WebSocketDisconnect:
             logger.debug("recordings ws disconnected (%s)", session_id)
+
+    @router.websocket("/benchmarks/{run_id}")
+    async def benchmarks_run(websocket: WebSocket, run_id: str) -> None:
+        controller = getattr(websocket.app.state.dashboard, "benchmark", None)
+        if controller is None:
+            await websocket.close(code=1011)
+            return
+        await websocket.accept()
+        aiter = controller.subscribe(run_id)
+
+        async def _drain_client() -> None:
+            try:
+                while True:
+                    await websocket.receive_text()
+            except WebSocketDisconnect:
+                pass
+
+        drain = asyncio.create_task(_drain_client(), name=f"benchmark-ws-drain-{run_id}")
+        try:
+            async for event in aiter:
+                try:
+                    await websocket.send_json(event)
+                except WebSocketDisconnect:
+                    break
+        except RunNotFoundError as exc:
+            await websocket.send_json({"type": "error", "message": str(exc)})
+        finally:
+            drain.cancel()
+            try:
+                await drain
+            except (asyncio.CancelledError, Exception):
+                pass
+            try:
+                await websocket.close()
+            except Exception:
+                pass
 
     return router
