@@ -55,6 +55,22 @@ class RobotManagerProtocol(Protocol):
     async def read_observation(self, robot_id: UUID) -> dict[str, Any]:
         """Read the latest observation (joint positions, camera frames, …)."""
 
+    async def read_raw_encoder_ticks(self, robot_id: UUID) -> dict[str, int]:
+        """Read raw Feetech encoder tick values without calibration or normalization.
+
+        Returns ``{motor_name: raw_tick_value}`` using the motor names as
+        registered on the bus (e.g. ``{"shoulder_pan": 2048}``).
+
+        Returns an empty dict when:
+        * the robot is offline or not connected,
+        * the robot does not expose a Feetech bus (e.g. UR robots),
+        * the raw read fails for any reason.
+
+        Callers should treat ``{}`` as "unavailable" rather than an error.
+        This method is intentionally softer than :meth:`read_observation`:
+        a raw-read failure does NOT mark the robot offline.
+        """
+
     async def get_features(self, robot_id: UUID) -> dict[str, dict]:
         """Return the hardware feature dicts for the attached :class:`Robot`.
 
@@ -142,6 +158,10 @@ class InMemoryRobotManager:
                 "timestamp": datetime.now(UTC).isoformat(),
                 "joints": {},
             }
+
+    async def read_raw_encoder_ticks(self, robot_id: UUID) -> dict[str, int]:
+        # InMemoryRobotManager has no hardware bus — always return empty.
+        return {}
 
     async def get_features(self, robot_id: UUID) -> dict[str, dict]:
         async with self._lock:

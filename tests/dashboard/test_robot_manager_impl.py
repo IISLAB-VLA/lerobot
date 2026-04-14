@@ -25,7 +25,6 @@ from lerobot.dashboard.services.robot_manager_impl import (
     register_robot_builder,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fake Robot
 # ---------------------------------------------------------------------------
@@ -254,6 +253,86 @@ async def test_connect_records_error_when_builder_raises() -> None:
 
     assert status.online is False
     assert "feetech-servo-sdk" in (status.last_error or "")
+
+
+# ---------------------------------------------------------------------------
+# read_raw_encoder_ticks
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _FakeMotorsBus:
+    """Minimal bus stub that records sync_read calls."""
+
+    raw_ticks: dict[str, int] = field(default_factory=lambda: {"shoulder_pan": 2048, "elbow_flex": 1024})
+    calls: list[tuple[str, bool]] = field(default_factory=list)
+
+    def sync_read(self, data_name: str, motors=None, normalize: bool = True) -> dict[str, int]:  # noqa: ANN001
+        self.calls.append((data_name, normalize))
+        return dict(self.raw_ticks)
+
+
+@dataclass
+class _FakeRobotWithBus(_FakeRobot):
+    """Fake robot that exposes a Feetech-style .bus attribute."""
+
+    bus: _FakeMotorsBus = field(default_factory=_FakeMotorsBus)
+
+
+async def test_read_raw_encoder_ticks_calls_bus_without_normalize() -> None:
+    bus = _FakeMotorsBus(raw_ticks={"shoulder_pan": 2048, "elbow_flex": 1000})
+    robot_with_bus = _FakeRobotWithBus(entry_name="so101", bus=bus)
+    mgr = LerobotRobotManager(robot_builder=lambda entry: robot_with_bus)
+    entry = _entry()
+    await mgr.connect(entry, cameras=[])
+
+    ticks = await mgr.read_raw_encoder_ticks(entry.id)
+
+    assert ticks == {"shoulder_pan": 2048, "elbow_flex": 1000}
+    # Must have called sync_read with normalize=False
+    assert ("Present_Position", False) in bus.calls
+
+
+async def test_read_raw_encoder_ticks_returns_empty_without_bus() -> None:
+    """Robots without a .bus attribute (e.g. UR) return empty dict."""
+    robot_no_bus = _FakeRobot(entry_name="ur")
+    mgr = LerobotRobotManager(robot_builder=lambda entry: robot_no_bus)
+    entry = _entry()
+    await mgr.connect(entry, cameras=[])
+
+    ticks = await mgr.read_raw_encoder_ticks(entry.id)
+
+    assert ticks == {}
+
+
+async def test_read_raw_encoder_ticks_returns_empty_when_offline() -> None:
+    mgr, _ = _fake_manager()
+    ticks = await mgr.read_raw_encoder_ticks(_entry().id)
+    assert ticks == {}
+
+
+async def test_read_raw_encoder_ticks_returns_empty_on_bus_error() -> None:
+    """Bus read failures are swallowed and return {} — robot stays online."""
+
+    class _BrokenBus:
+        def sync_read(self, data_name: str, motors=None, normalize: bool = True) -> dict:  # noqa: ANN001
+            raise OSError("CRC error")
+
+    @dataclass
+    class _RobotWithBrokenBus(_FakeRobot):
+        bus: _BrokenBus = field(default_factory=_BrokenBus)
+
+    robot = _RobotWithBrokenBus(entry_name="so101_broken")
+    mgr = LerobotRobotManager(robot_builder=lambda entry: robot)
+    entry = _entry()
+    await mgr.connect(entry, cameras=[])
+
+    ticks = await mgr.read_raw_encoder_ticks(entry.id)
+
+    assert ticks == {}
+    # Robot must still be online (raw-read failure is soft)
+    status = await mgr.get_status(entry.id)
+    assert status.online is True
 
 
 async def test_manager_parallel_connect_is_serialized() -> None:
