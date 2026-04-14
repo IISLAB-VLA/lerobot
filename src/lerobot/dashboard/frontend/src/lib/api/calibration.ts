@@ -3,7 +3,7 @@ import { api } from "@/lib/api";
 
 export interface CalibrateStartResponse {
   session_id: string;
-  total_steps: number | null;
+  total_steps: number;
   robot_type: string;
   step_ids: string[];
 }
@@ -21,17 +21,20 @@ export interface CalibrateStatusResponse {
   session_id: string;
   step_id: string;
   step_index: number;
-  total_steps: number | null;
+  total_steps: number;
   progress: number;
   awaiting_user_input: boolean;
   started_at: string;
+  robot_type: string;
 }
 
 export interface CalibrationSummary {
   calibration_id: string;
-  calibration_path: string;
-  recorded_at: string;
-  summary?: Record<string, unknown>;
+  completed_at: string;
+  robot_type: string;
+  step_ids: string[];
+  result: "ok" | "error" | "cancelled";
+  error?: Record<string, string> | null;
 }
 
 export class CalibrationConflictError extends Error {
