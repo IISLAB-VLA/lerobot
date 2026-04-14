@@ -39,12 +39,14 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `uv run lerobot-dashboard --host 127.0.0.1 --port ${PORT} --static-dir src/lerobot/dashboard/static --storage-dir ${STORAGE_DIR}`,
+    command: `uv run lerobot-dashboard --host 127.0.0.1 --port ${PORT}`,
     url: `${BASE_URL}/api/health`,
     cwd: "../../../",
     env: {
       LEROBOT_DASHBOARD_FAKE_DEVICES: "1",
       LEROBOT_DASHBOARD_FAKE_POLICY: "1",
+      LEROBOT_DASHBOARD_STATIC_DIR: "src/lerobot/dashboard/static",
+      LEROBOT_DASHBOARD_STORAGE_DIR: STORAGE_DIR,
       PYTHONUNBUFFERED: "1",
     },
     timeout: 120_000,
