@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Camera, Cpu } from "lucide-react";
@@ -44,18 +45,7 @@ export function RobotCard({ robot, cameras }: RobotCardProps): JSX.Element {
       className="group relative flex cursor-pointer flex-col overflow-hidden transition-all hover:border-ring hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <div className="relative aspect-video w-full overflow-hidden bg-muted">
-        {robot.image_ref ? (
-          <img
-            src={robot.image_ref}
-            alt={`${robot.robot_type} illustration`}
-            className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-            <Cpu className="h-10 w-10" aria-hidden />
-          </div>
-        )}
+        <RobotImage robot={robot} />
         <div className="absolute right-3 top-3 rounded-full bg-background/90 px-2.5 py-1 backdrop-blur">
           <StatusDot kind={statusKind} />
         </div>
@@ -93,4 +83,36 @@ function summarizeConnection(robot: RobotEntry): string {
   const c = robot.connection;
   if (c.kind === "serial") return `serial · ${c.port}`;
   return `${c.protocol} · ${c.host}:${c.port}`;
+}
+
+const GENERIC_ROBOT_IMAGE = "/resources/robots/_generic.svg";
+
+function RobotImage({ robot }: { robot: RobotEntry }): JSX.Element {
+  const initialSrc = robot.image_ref ?? GENERIC_ROBOT_IMAGE;
+  const [src, setSrc] = useState(initialSrc);
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+        <Cpu className="h-10 w-10" aria-hidden />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={`${robot.robot_type} illustration`}
+      className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+      loading="lazy"
+      onError={() => {
+        if (src !== GENERIC_ROBOT_IMAGE) {
+          setSrc(GENERIC_ROBOT_IMAGE);
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
+  );
 }
