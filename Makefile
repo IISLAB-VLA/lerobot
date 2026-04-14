@@ -12,11 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-<<<<<<< HEAD
-.PHONY: tests dashboard-e2e dashboard-e2e-nobuild dashboard-e2e-install
-=======
-.PHONY: tests dashboard-e2e dashboard-e2e-install dashboard-e2e-nobuild
->>>>>>> dash-backend
+.PHONY: tests dashboard-e2e dashboard-e2e-nobuild dashboard-e2e-install dashboard-e2e-hardware
 
 PYTHON_PATH := $(shell which python)
 
