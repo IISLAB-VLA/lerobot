@@ -31,8 +31,7 @@ import hashlib
 import logging
 import re
 import time
-from collections import OrderedDict
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -44,6 +43,13 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
 from lerobot.dashboard.services.camera_manager import CameraManagerProtocol
+from lerobot.dashboard.services.policy_loader import (
+    PolicyCache,
+    PolicyDescriptor,
+    PolicyLoader,
+    _default_policy_loader,
+    scan_hf_cache,
+)
 from lerobot.dashboard.services.registry import Registry
 from lerobot.dashboard.services.registry_models import CameraEntry, RobotEntry
 from lerobot.dashboard.services.robot_manager import RobotManagerProtocol
@@ -69,28 +75,7 @@ class InferenceValidationError(InferenceError):
 
 InferenceStatus = Literal["starting", "running", "stopping", "stopped", "failed"]
 _TERMINAL_STATUSES: frozenset[str] = frozenset({"stopped", "failed"})
-_LANGUAGE_POLICY_TYPES: frozenset[str] = frozenset({"pi0", "pi05", "smolvla", "wall_x"})
 _REPO_ID_RE = re.compile(r"^[\w.\-]+/[\w.\-]+$|^[\w.\-]+$")
-
-
-# ---------------------------------------------------------------------------
-# Policy discovery + loading
-# ---------------------------------------------------------------------------
-
-
-class PolicyDescriptor(BaseModel):
-    """Summary of a locally cached policy checkpoint."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    repo_id: str
-    policy_type: str
-    root: str
-    num_parameters: int | None = None
-    last_modified: datetime | None = None
-    observation_features: dict[str, Any] | None = None
-    action_features: dict[str, Any] | None = None
-    supports_language: bool = False
 
 
 class StartRequest(BaseModel):
@@ -165,155 +150,6 @@ class StepEvent(BaseModel):
     text: str | None = None
     message: str | None = None
     reason: str | None = None
-
-
-PolicyLoader = Callable[[str], Any]
-"""Callable ``repo_id -> PreTrainedPolicy``. Injectable for tests."""
-
-
-def _default_policy_loader(repo_id: str) -> Any:  # pragma: no cover — touches HF cache
-    """Thread-safe policy loader that resolves the concrete class from the cache.
-
-    ``PreTrainedPolicy.from_pretrained`` cannot be called on the abstract
-    base class directly — it would try to instantiate the abstract class.
-    Instead we:
-    1. Load the config (draccus parses ``config.json`` and returns the
-       concrete sub-config, e.g. ``SmolVLAConfig``).
-    2. Resolve the concrete policy class via ``get_policy_class(config.type)``.
-    3. Load weights via ``cls.from_pretrained(repo_id, config=config)``.
-    """
-    from lerobot.configs.policies import PreTrainedConfig
-    from lerobot.policies.factory import get_policy_class
-
-    config = PreTrainedConfig.from_pretrained(repo_id)
-    cls = get_policy_class(config.type)
-    return cls.from_pretrained(repo_id, config=config)
-
-
-def scan_hf_cache(cache_dir: Path | None = None) -> list[PolicyDescriptor]:
-    """Enumerate locally cached LeRobot policies.
-
-    Scans the HuggingFace cache directory (``cache_dir``, defaulting to
-    ``HF_HOME/hub``) for repos whose ``config.json`` declares a
-    ``policy_type`` known to :func:`lerobot.policies.factory.get_policy_class`.
-    Unknown or partially-downloaded repos are skipped with a debug log
-    rather than raising — a missing policy file shouldn't block the UI
-    from listing the rest.
-    """
-    from huggingface_hub import scan_cache_dir
-
-    try:
-        info = scan_cache_dir(cache_dir) if cache_dir is not None else scan_cache_dir()
-    except Exception as exc:  # noqa: BLE001 — a bad cache should not break list endpoints
-        logger.warning("scan_cache_dir failed: %s", exc)
-        return []
-
-    descriptors: list[PolicyDescriptor] = []
-    for repo in info.repos:
-        if repo.repo_type != "model":
-            continue
-        descriptor = _describe_cached_repo(repo)
-        if descriptor is not None:
-            descriptors.append(descriptor)
-    descriptors.sort(key=lambda d: (d.last_modified or datetime.min), reverse=True)
-    return descriptors
-
-
-def _describe_cached_repo(repo: Any) -> PolicyDescriptor | None:
-    """Build a :class:`PolicyDescriptor` from a single ``CachedRepoInfo``."""
-    import json
-
-    repo_path = Path(repo.repo_path)
-    config_path = _find_first(repo_path, "config.json")
-    if config_path is None:
-        return None
-    try:
-        with config_path.open(encoding="utf-8") as fp:
-            config = json.load(fp)
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.debug("skip cached repo %s (unreadable config.json): %s", repo.repo_id, exc)
-        return None
-    policy_type = config.get("policy_type") or config.get("type")
-    if not policy_type:
-        return None
-    if not _is_known_policy_type(policy_type):
-        return None
-    last_modified = datetime.fromtimestamp(repo.last_modified, tz=UTC) if repo.last_modified else None
-    return PolicyDescriptor(
-        repo_id=repo.repo_id,
-        policy_type=policy_type,
-        root=str(repo_path),
-        num_parameters=config.get("num_parameters"),
-        last_modified=last_modified,
-        observation_features=config.get("input_features") or config.get("observation_features"),
-        action_features=config.get("output_features") or config.get("action_features"),
-        supports_language=policy_type in _LANGUAGE_POLICY_TYPES,
-    )
-
-
-def _find_first(root: Path, filename: str) -> Path | None:
-    """Return the first ``filename`` under ``root`` (breadth-first)."""
-    for candidate in root.rglob(filename):
-        if candidate.is_file():
-            return candidate
-    return None
-
-
-def _is_known_policy_type(policy_type: str) -> bool:
-    try:
-        from lerobot.policies.factory import get_policy_class
-
-        get_policy_class(policy_type)
-    except Exception:
-        return False
-    return True
-
-
-# ---------------------------------------------------------------------------
-# LRU policy cache
-# ---------------------------------------------------------------------------
-
-
-class PolicyCache:
-    """Least-recently-used cache of loaded :class:`PreTrainedPolicy` handles.
-
-    Default ``max_resident=2`` keeps typical dashboard memory bounded when
-    the operator toggles between a small set of policies without forcing
-    a weight reload on every start/stop.
-    """
-
-    def __init__(
-        self,
-        loader: PolicyLoader,
-        max_resident: int = 2,
-    ) -> None:
-        self._loader = loader
-        self._max = max_resident
-        self._lock = asyncio.Lock()
-        self._entries: OrderedDict[str, Any] = OrderedDict()
-
-    async def get(self, repo_id: str) -> Any:
-        async with self._lock:
-            if repo_id in self._entries:
-                self._entries.move_to_end(repo_id)
-                return self._entries[repo_id]
-        # Load outside the lock — a cold model can take seconds and we
-        # don't want to block concurrent ``get`` calls for other repos.
-        policy = await asyncio.to_thread(self._loader, repo_id)
-        async with self._lock:
-            self._entries[repo_id] = policy
-            self._entries.move_to_end(repo_id)
-            while len(self._entries) > self._max:
-                self._entries.popitem(last=False)
-        return policy
-
-    async def evict(self, repo_id: str) -> None:
-        async with self._lock:
-            self._entries.pop(repo_id, None)
-
-    async def clear(self) -> None:
-        async with self._lock:
-            self._entries.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -915,6 +751,7 @@ __all__ = [
     "InferenceSession",
     "InferenceStatus",
     "InferenceValidationError",
+    # Re-exported from policy_loader for backwards compat with existing imports
     "PolicyCache",
     "PolicyDescriptor",
     "PolicyLoader",
