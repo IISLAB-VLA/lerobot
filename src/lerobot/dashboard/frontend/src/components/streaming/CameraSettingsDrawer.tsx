@@ -104,7 +104,7 @@ function SettingsPanel({
           <p role="alert" className="text-destructive">
             Failed to load capabilities.
           </p>
-        ) : data === null ? (
+        ) : data == null ? (
           <p className="text-muted-foreground">No capabilities info available.</p>
         ) : (
           <CapabilitiesView caps={data} />
