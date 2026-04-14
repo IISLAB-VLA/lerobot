@@ -45,6 +45,11 @@ _TERMINAL = object()
 _STUB_STEPS_PER_EPISODE = 25
 _STUB_MAX_HZ = 30.0
 
+# Static-mount prefix for per-run artefacts (observation JPGs, preview mp4).
+# app.py mounts ``BenchmarkController.runs_dir`` here so the WS step events
+# can include absolute URLs.
+BENCHMARK_RESOURCE_URL_PREFIX = "/resources/benchmarks"
+
 
 RunStatus = Literal["queued", "running", "completed", "cancelled", "failed"]
 
@@ -229,6 +234,11 @@ class BenchmarkController:
         self._storage_dir = Path(storage_dir)
         self._storage_dir.mkdir(parents=True, exist_ok=True)
         self._runner = runner or self._default_stub_runner
+
+    @property
+    def runs_dir(self) -> Path:
+        """Parent directory holding per-run artefact subdirectories."""
+        return self._storage_dir
 
     # ----- listing --------------------------------------------------------
 

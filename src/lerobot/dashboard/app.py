@@ -15,7 +15,12 @@ from lerobot.dashboard.api.router import build_api_router
 from lerobot.dashboard.core.config import DashboardConfig
 from lerobot.dashboard.core.state import AppState
 from lerobot.dashboard.services.assets import RESOURCE_URL_PREFIX, AssetManager
-from lerobot.dashboard.services.benchmark import BenchmarkController
+from lerobot.dashboard.services.benchmark import (
+    BENCHMARK_RESOURCE_URL_PREFIX,
+    BenchmarkController,
+)
+from lerobot.dashboard.services.benchmark_runners import PolicyDispatchRunner
+from lerobot.dashboard.services.policy_loader import PolicyCache
 from lerobot.dashboard.services.calibration import CalibrationController
 from lerobot.dashboard.services.camera_manager import InMemoryCameraManager, LerobotCameraManager
 from lerobot.dashboard.services.inference import InferenceService
@@ -85,7 +90,11 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         state.camera_manager = LerobotCameraManager()
     state.teleop_manager = InMemoryTeleopManager()
     state.calibration = CalibrationController()
-    state.benchmark = BenchmarkController(storage_dir=resolved.storage_dir / "benchmarks")
+    state.policy_cache = PolicyCache()
+    state.benchmark = BenchmarkController(
+        storage_dir=resolved.storage_dir / "benchmarks",
+        runner=PolicyDispatchRunner(state.policy_cache),
+    )
     # Streaming bridges the camera_manager's ``subscribe()`` into the
     # WebRTC track. In ``fake_devices`` mode ``state.camera_manager`` is
     # the in-memory fallback so the wiring still succeeds — frames are
@@ -156,6 +165,16 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         RESOURCE_URL_PREFIX,
         StaticFiles(directory=str(assets.robots_dir)),
         name="robot-images",
+    )
+
+    # /resources/benchmarks/{run_id}/observations/episode_{ep}/step_{n}.jpg
+    # serves the per-step JPGs written by RandomActionEnvRunner. The
+    # WS step events embed an absolute URL under this mount so the FE
+    # can render a thumbnail without a REST round-trip.
+    app.mount(
+        BENCHMARK_RESOURCE_URL_PREFIX,
+        StaticFiles(directory=str(state.benchmark.runs_dir), check_dir=False),
+        name="benchmark-runs",
     )
 
     if resolved.static_dir is not None and resolved.static_dir.is_dir():

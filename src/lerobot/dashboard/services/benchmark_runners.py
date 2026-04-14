@@ -25,6 +25,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from lerobot.dashboard.services.benchmark import BENCHMARK_RESOURCE_URL_PREFIX
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:  # pragma: no cover — import deferred until rollout time
@@ -254,6 +256,41 @@ def _save_jpeg(image: Any, dest: Path) -> None:
     Image.fromarray(arr).save(dest, "JPEG", quality=OBS_JPG_QUALITY)
 
 
+def _encode_episode_to_mp4(jpg_paths: list[Path], dest: Path, fps: int) -> None:
+    """Blocking JPG-sequence → H.264 mp4 encode. Wrap in :func:`asyncio.to_thread`."""
+    import av
+    import numpy as np
+    from PIL import Image
+
+    if not jpg_paths:
+        raise ValueError("jpg_paths is empty")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    first = np.asarray(Image.open(jpg_paths[0]).convert("RGB"))
+    height, width, _ = first.shape
+
+    # H.264 needs even dimensions for yuv420p.
+    width = width - (width % 2)
+    height = height - (height % 2)
+
+    container = av.open(str(dest), mode="w")
+    try:
+        stream = container.add_stream("h264", rate=fps)
+        stream.width = width
+        stream.height = height
+        stream.pix_fmt = "yuv420p"
+        stream.options = {"movflags": "+faststart"}
+
+        for path in jpg_paths:
+            arr = np.asarray(Image.open(path).convert("RGB"))[:height, :width]
+            frame = av.VideoFrame.from_ndarray(arr, format="rgb24")
+            for packet in stream.encode(frame):
+                container.mux(packet)
+        for packet in stream.encode():  # flush trailing packets
+            container.mux(packet)
+    finally:
+        container.close()
+
+
 def _action_keys_from_space(space: Any, prefix: str = "a") -> list[str]:
     """Generate stable action column names from a gym action space.
 
@@ -328,14 +365,14 @@ class RandomActionEnvRunner:
             if run.cancelled:
                 return
             seed = self._seed_for(run.seed, episode)
-            await asyncio.to_thread(vec_env.reset, seed=seed)
+            obs, _ = await asyncio.to_thread(vec_env.reset, seed=seed)
             run.current_episode = episode
 
             for step in range(self._max_steps):
                 if run.cancelled:
                     return
-                action = await asyncio.to_thread(self._choose_action, vec_env)
-                obs, reward, terminated, truncated, info = await asyncio.to_thread(vec_env.step, action)
+                action = await asyncio.to_thread(self._choose_action, vec_env, obs)
+                obs, reward, terminated, truncated, _info = await asyncio.to_thread(vec_env.step, action)
 
                 # vec_env returns arrays of shape (n_envs,) — n_envs == 1 here.
                 reward_scalar = float(np.asarray(reward).flatten()[0])
@@ -370,11 +407,15 @@ class RandomActionEnvRunner:
                 }
                 if obs_jpg_path is not None:
                     step_event["obs_jpg_path"] = obs_jpg_path
+                    step_event["obs_jpg_url"] = (
+                        f"{BENCHMARK_RESOURCE_URL_PREFIX}/{run.run_id}/{obs_jpg_path}"
+                    )
                 await publish(run, step_event)
 
                 if terminated_scalar or truncated_scalar:
                     break
             run.progress = (episode + 1) / max(run.episodes, 1)
+            await self._finalize_episode_preview(run, episode, publish)
 
     async def _maybe_save_obs(
         self, storage_dir: Path, episode: int, step: int, obs: Any
@@ -386,6 +427,38 @@ class RandomActionEnvRunner:
         await asyncio.to_thread(_save_jpeg, image, storage_dir / rel_path)
         return rel_path
 
+    async def _finalize_episode_preview(self, run: Any, episode: int, publish: Any) -> None:
+        """Encode the per-episode JPG sequence into an mp4 + publish ``preview_ready``.
+
+        Skips episodes without any saved observations (state-only envs).
+        Encoding errors are logged + dropped — they shouldn't kill the run.
+        """
+        storage_dir = Path(run.storage_dir)
+        episode_dir = storage_dir / "observations" / f"episode_{episode}"
+        if not episode_dir.is_dir():
+            return
+        jpg_paths = sorted(episode_dir.glob("step_*.jpg"))
+        if not jpg_paths:
+            return
+        fps = max(int(getattr(run, "fps", 0)) or 10, 1)
+        rel_path = f"previews/episode_{episode}.mp4"
+        dest = storage_dir / rel_path
+        try:
+            await asyncio.to_thread(_encode_episode_to_mp4, jpg_paths, dest, fps)
+        except Exception:
+            logger.exception("preview encoding failed for run %s episode %s", run.run_id, episode)
+            return
+        await publish(
+            run,
+            {
+                "type": "preview_ready",
+                "episode": episode,
+                "policy_slug": self.POLICY_SLUG,
+                "preview_path": rel_path,
+                "preview_url": f"{BENCHMARK_RESOURCE_URL_PREFIX}/{run.run_id}/{rel_path}",
+            },
+        )
+
     @staticmethod
     def _seed_for(base_seed: int | None, episode: int) -> int | None:
         if base_seed is None:
@@ -393,12 +466,169 @@ class RandomActionEnvRunner:
         return int(base_seed) + int(episode)
 
     @staticmethod
-    def _choose_action(vec_env: Any) -> Any:
+    def _choose_action(vec_env: Any, obs: Any = None) -> Any:
         return vec_env.action_space.sample()
+
+
+# ---------------------------------------------------------------------------
+# Observation → policy input conversion
+# ---------------------------------------------------------------------------
+
+
+def _obs_to_policy_input(obs: Any, device: str = "cpu") -> "dict[str, Any]":
+    """Convert gym obs (numpy array or dict) to a policy ``select_action`` input.
+
+    Gym vector envs return arrays shaped ``(n_envs, ...)``.  We drop the
+    leading axis (we always run ``n_envs=1``) and add a batch dim of 1 so
+    the policy sees ``(1, ...)``.  Float coercion is applied — policies
+    generally expect ``float32`` tensors.
+
+    Key names are passed through as-is; the caller is responsible for
+    ensuring the env's observation keys match the policy's
+    ``input_features``.
+    """
+    import numpy as np
+    import torch
+
+    def _convert(value: Any) -> "torch.Tensor":
+        arr = np.asarray(value)
+        # Drop vec_env batch axis when n_envs == 1.
+        if arr.ndim > 0 and arr.shape[0] == 1:
+            arr = arr[0]
+        tensor = torch.from_numpy(np.array(arr)).float()
+        # Add policy batch dim.
+        return tensor.unsqueeze(0).to(device)
+
+    if isinstance(obs, dict):
+        return {key: _convert(value) for key, value in obs.items()}
+    # Flat ndarray obs — use a generic key.
+    return {"observation": _convert(obs)}
+
+
+# ---------------------------------------------------------------------------
+# Policy-driven runner (Phase 2b)
+# ---------------------------------------------------------------------------
+
+
+class PolicyEnvRunner(RandomActionEnvRunner):
+    """Phase 2b runner: replaces random actions with a real policy.
+
+    Loads the policy lazily on first ``__call__`` via :class:`PolicyCache`
+    so the async event loop stays unblocked during weight loading.
+
+    The obs→action path is:
+        gym obs (numpy) → :func:`_obs_to_policy_input` → ``policy.select_action``
+        → numpy action → ``vec_env.step``
+
+    Env/policy compatibility (matching observation key names) is the
+    caller's responsibility; a ``KeyError`` or shape mismatch from
+    ``select_action`` will surface as a run ``error`` event via the
+    controller's ``_drive_run`` exception handler.
+    """
+
+    def __init__(
+        self,
+        policy_cache: Any,
+        repo_id: str,
+        env_factory: EnvFactory | None = None,
+        max_steps_per_episode: int = 500,
+        device: str = "cpu",
+    ) -> None:
+        super().__init__(env_factory=env_factory, max_steps_per_episode=max_steps_per_episode)
+        self._policy_cache = policy_cache
+        self._repo_id = repo_id
+        self._device = device
+        # POLICY_SLUG shown in the parquet / WS events — short human-readable name.
+        self.POLICY_SLUG = repo_id.split("/")[-1]
+        self._policy: Any = None
+
+    async def __call__(self, run: Any, publish: Any) -> None:
+        self._policy = await self._policy_cache.get(self._repo_id)
+        if hasattr(self._policy, "eval"):
+            self._policy.eval()
+        await super().__call__(run, publish)
+
+    def _choose_action(self, vec_env: Any, obs: Any = None) -> Any:  # type: ignore[override]
+        import numpy as np
+        import torch
+
+        if self._policy is None or obs is None:
+            return vec_env.action_space.sample()
+        obs_dict = _obs_to_policy_input(obs, self._device)
+        with torch.no_grad():
+            action_tensor = self._policy.select_action(obs_dict)
+        # Convert back to numpy for gym.step — strip batch dim.
+        action = action_tensor.cpu().numpy()
+        if action.ndim > 1 and action.shape[0] == 1:
+            action = action[0]
+        return np.expand_dims(action, 0)  # restore vec_env (n_envs=1) axis
+
+
+# ---------------------------------------------------------------------------
+# Dispatcher (wires into BenchmarkController as its runner)
+# ---------------------------------------------------------------------------
+
+
+class PolicyDispatchRunner:
+    """Selects :class:`RandomActionEnvRunner` or :class:`PolicyEnvRunner` per run.
+
+    Injected into :class:`BenchmarkController` at ``create_app`` time.
+    When ``run.policy_refs`` is empty the random baseline is used; when
+    one policy is requested a :class:`PolicyEnvRunner` is created for it.
+    Multiple refs are run sequentially (same episode set, distinct slugs).
+
+    Parameters
+    ----------
+    policy_cache:
+        A :class:`~lerobot.dashboard.services.policy_loader.PolicyCache`
+        instance shared across runs.
+    env_factory:
+        Optional env factory override (mainly for tests).
+    device:
+        PyTorch device string passed to :class:`PolicyEnvRunner`.
+    max_steps_per_episode:
+        Forwarded to each underlying runner.
+    """
+
+    def __init__(
+        self,
+        policy_cache: Any,
+        env_factory: EnvFactory | None = None,
+        device: str = "cpu",
+        max_steps_per_episode: int = 500,
+    ) -> None:
+        self._policy_cache = policy_cache
+        self._env_factory = env_factory
+        self._device = device
+        self._max_steps = max_steps_per_episode
+
+    async def __call__(self, run: Any, publish: Any) -> None:
+        policy_refs: list[str] = list(getattr(run, "policy_refs", []) or [])
+        if not policy_refs:
+            runner = RandomActionEnvRunner(
+                env_factory=self._env_factory,
+                max_steps_per_episode=self._max_steps,
+            )
+            await runner(run, publish)
+            return
+
+        for repo_id in policy_refs:
+            if run.cancelled:
+                return
+            runner = PolicyEnvRunner(
+                policy_cache=self._policy_cache,
+                repo_id=repo_id,
+                env_factory=self._env_factory,
+                max_steps_per_episode=self._max_steps,
+                device=self._device,
+            )
+            await runner(run, publish)
 
 
 __all__ = [
     "OBS_JPG_QUALITY",
+    "PolicyDispatchRunner",
+    "PolicyEnvRunner",
     "RandomActionEnvRunner",
     "TrajectoryWriter",
 ]
