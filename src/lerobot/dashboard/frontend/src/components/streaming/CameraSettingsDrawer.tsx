@@ -124,17 +124,19 @@ function CapabilitiesView({ caps }: { caps: CameraCapabilities }): JSX.Element {
       />
       <div>
         <dt className="font-medium text-muted-foreground">Resolutions</dt>
-        <dd className="mt-0.5 font-mono">
+        <dd className="mt-0.5 font-mono" data-testid="camera-settings-resolution">
           {caps.resolutions.map((r) => `${r.width}×${r.height}`).join(", ")}
         </dd>
       </div>
       <div>
         <dt className="font-medium text-muted-foreground">FPS options</dt>
-        <dd className="mt-0.5 font-mono">{caps.fps_options.join(", ")}</dd>
+        <dd className="mt-0.5 font-mono" data-testid="camera-settings-fps">
+          {caps.fps_options.join(", ")}
+        </dd>
       </div>
       <div>
         <dt className="font-medium text-muted-foreground">Codecs (pref. order)</dt>
-        <dd className="mt-0.5 flex flex-wrap gap-1">
+        <dd className="mt-0.5 flex flex-wrap gap-1" data-testid="camera-settings-codec">
           {caps.codecs.map((c, i) => (
             <span
               key={c}
