@@ -36,6 +36,9 @@ export interface InferenceSession {
   stopped_at: string | null;
   error: string | null;
   last_latency_ms: number | null;
+  deadman_required: boolean;
+  deadman_held: boolean;
+  max_action_magnitude: number | null;
 }
 
 export interface StartInferenceRequest {
@@ -44,10 +47,16 @@ export interface StartInferenceRequest {
   fps?: number;
   task_description: string;
   dry_run: boolean;
+  deadman_required?: boolean;
+  max_action_magnitude?: number | null;
 }
 
 export interface CommandRequest {
   text: string;
+}
+
+export interface DeadmanRequest {
+  held: boolean;
 }
 
 export interface InferenceStepEvent {
@@ -167,6 +176,21 @@ export async function setInferenceCommand(
 ): Promise<void> {
   try {
     await api.post(`/inference/${sessionId}/command`, payload);
+  } catch (err) {
+    liftConflict(err);
+  }
+}
+
+export async function setInferenceDeadman(
+  sessionId: string,
+  payload: DeadmanRequest,
+): Promise<InferenceSession> {
+  try {
+    const { data } = await api.post<InferenceSession>(
+      `/inference/${sessionId}/deadman`,
+      payload,
+    );
+    return data;
   } catch (err) {
     liftConflict(err);
   }

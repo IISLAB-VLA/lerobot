@@ -209,7 +209,7 @@ export function RobotDetailPage(): JSX.Element {
               </Link>
             </Button>
           ) : null}
-          {import.meta.env.VITE_ENABLE_INFERENCE === "1" ? (
+          {import.meta.env.VITE_ENABLE_INFERENCE !== "0" ? (
             <Button asChild variant="outline" size="sm">
               <Link to={`/robots/${robot.id}/inference`}>
                 <BrainCircuit className="h-4 w-4" aria-hidden />
