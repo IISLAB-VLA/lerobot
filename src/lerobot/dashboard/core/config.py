@@ -54,12 +54,16 @@ class DashboardConfig:
     )
 
     def export_to_env(self) -> None:
-        """Write config values into ``os.environ`` for the uvicorn factory."""
+        """Write config values into ``os.environ`` for the uvicorn factory.
+
+        Only populated values are written. We never ``pop`` an existing env
+        variable here — if the caller wants ``static_dir`` unset, they must
+        clear the env themselves; silently erasing what the user set would
+        make env-driven deployments (systemd, docker) surprising.
+        """
         os.environ[ENV_STORAGE_DIR] = str(self.storage_dir)
         if self.static_dir is not None:
             os.environ[ENV_STATIC_DIR] = str(self.static_dir)
-        else:
-            os.environ.pop(ENV_STATIC_DIR, None)
         os.environ[ENV_CORS_ORIGINS] = ",".join(self.cors_origins)
         os.environ[ENV_LOG_LEVEL] = self.log_level
         os.environ[ENV_FAKE_DEVICES] = "1" if self.fake_devices else "0"

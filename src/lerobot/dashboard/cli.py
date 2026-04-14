@@ -60,16 +60,20 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _config_from_args(args: argparse.Namespace) -> DashboardConfig:
-    base = DashboardConfig()
+    # Use ``from_env`` as the base so env-set values (e.g. ``LEROBOT_DASHBOARD_STATIC_DIR``)
+    # survive when the matching CLI flag is omitted. Explicit CLI args still override.
+    base = DashboardConfig.from_env()
     cors = tuple(args.cors_origin) if args.cors_origin else base.cors_origins
     return DashboardConfig(
         host=args.host,
         port=args.port,
         reload=bool(args.reload),
         storage_dir=args.storage_dir.expanduser() if args.storage_dir else base.storage_dir,
-        static_dir=args.static_dir.expanduser() if args.static_dir else None,
+        static_dir=args.static_dir.expanduser() if args.static_dir else base.static_dir,
         cors_origins=cors,
         log_level=args.log_level,
+        fake_devices=base.fake_devices,
+        fake_policy=base.fake_policy,
     )
 
 
