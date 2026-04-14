@@ -19,6 +19,7 @@ from lerobot.dashboard.services.benchmark_runners import (
     PolicyDispatchRunner,
     PolicyEnvRunner,
     RandomActionEnvRunner,
+    RobotEnvRunner,
     TrajectoryWriter,
 )
 
@@ -411,6 +412,96 @@ async def test_dispatch_runner_uses_random_when_no_policy_refs(tmp_path: Path) -
     step_events = [e for e in captured if e["type"] == "step"]
     assert len(step_events) == 3
     assert all(e["policy_slug"] == "random" for e in step_events)
+
+
+async def test_robot_env_runner_loop_steps_and_records(tmp_path: Path) -> None:
+    """RobotEnvRunner drives a fake RobotManager for N steps and records trajectory."""
+
+    class _FakeRobotManager:
+        def __init__(self) -> None:
+            self.actions_received: list[dict] = []
+
+        def get_observation(self, robot_id: str) -> dict:
+            return {"joint_0": 0.1, "joint_1": -0.2, "joint_2": 0.3}
+
+        def send_action(self, robot_id: str, action: dict) -> None:
+            self.actions_received.append(action)
+
+    fake_manager = _FakeRobotManager()
+    run = _RunShim(
+        run_id="run-robot",
+        env_name="so101",
+        episodes=1,
+        seed=0,
+        storage_dir=tmp_path,
+    )
+    captured: list[dict] = []
+
+    async def publish(_run: _RunShim, event: dict) -> None:
+        captured.append(event)
+
+    runner = RobotEnvRunner(
+        robot_id="robot-0",
+        robot_manager=fake_manager,
+        max_steps_per_episode=3,
+    )
+    await runner(run, publish)
+
+    step_events = [e for e in captured if e["type"] == "step"]
+    assert len(step_events) == 3
+    assert step_events[-1]["done"] is True
+    assert step_events[-1]["truncated"] is False
+    assert all(e["policy_slug"] == "robot_random" for e in step_events)
+    # send_action called once per step.
+    assert len(fake_manager.actions_received) == 3
+    # Actions are hold-position (observation values).
+    assert fake_manager.actions_received[0] == pytest.approx(
+        {"joint_0": 0.1, "joint_1": -0.2, "joint_2": 0.3}, abs=1e-4
+    )
+
+    table = pq.read_table(tmp_path / "trajectory.parquet")
+    assert table.num_rows == 3
+    assert set(table.column_names) >= {"run_id", "episode", "step", "reward", "done"}
+    assert all(r == pytest.approx(0.0) for r in table.column("reward").to_pylist())
+    assert run.progress == pytest.approx(1.0)
+
+
+async def test_robot_env_runner_respects_cancellation(tmp_path: Path) -> None:
+    """RobotEnvRunner stops early when run.cancelled is set."""
+
+    call_count = 0
+
+    class _FakeRobotManager:
+        def get_observation(self, robot_id: str) -> dict:
+            nonlocal call_count
+            call_count += 1
+            return {"joint_0": 0.0}
+
+        def send_action(self, robot_id: str, action: dict) -> None:
+            pass
+
+    run = _RunShim(
+        run_id="run-robot-cancel",
+        env_name="so101",
+        episodes=3,
+        seed=0,
+        storage_dir=tmp_path,
+    )
+    captured: list[dict] = []
+
+    async def publish(_run: _RunShim, event: dict) -> None:
+        captured.append(event)
+        if len(captured) == 2:
+            run.cancelled = True
+
+    runner = RobotEnvRunner(
+        robot_id="robot-0",
+        robot_manager=_FakeRobotManager(),
+        max_steps_per_episode=100,
+    )
+    await runner(run, publish)
+    # Should stop well short of 3 * 100 steps.
+    assert len(captured) <= 5
 
 
 async def test_runner_honours_cancellation_between_steps(tmp_path: Path) -> None:
