@@ -17,7 +17,11 @@ from lerobot.dashboard.core.config import DashboardConfig  # noqa: E402
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
-    config = DashboardConfig(storage_dir=tmp_path / "storage", static_dir=None)
+    config = DashboardConfig(
+        storage_dir=tmp_path / "storage",
+        static_dir=None,
+        fake_devices=True,
+    )
     return TestClient(create_app(config))
 
 
