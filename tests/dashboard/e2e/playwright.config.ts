@@ -1,7 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const PORT = Number(process.env.DASHBOARD_PORT ?? 18080);
 const BASE_URL = process.env.DASHBOARD_BASE_URL ?? `http://localhost:${PORT}`;
+// Isolate registry state per run so local ~/.cache/lerobot/dashboard stays clean
+// and specs do not see leftover robots/cameras from a previous session.
+const STORAGE_DIR =
+  process.env.DASHBOARD_STORAGE_DIR ?? mkdtempSync(join(tmpdir(), "lerobot-dashboard-e2e-"));
 
 export default defineConfig({
   testDir: "./specs",
@@ -32,7 +39,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `uv run lerobot-dashboard --host 127.0.0.1 --port ${PORT} --static-dir src/lerobot/dashboard/static`,
+    command: `uv run lerobot-dashboard --host 127.0.0.1 --port ${PORT} --static-dir src/lerobot/dashboard/static --storage-dir ${STORAGE_DIR}`,
     url: `${BASE_URL}/api/health`,
     cwd: "../../../",
     env: {
