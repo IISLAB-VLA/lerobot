@@ -98,6 +98,46 @@ def test_track_falls_back_when_source_raises():
     assert failures == 1
 
 
+def test_track_fires_on_recover_after_failure():
+    """After a transient failure followed by a good frame, the recovery hook fires."""
+
+    import numpy as np
+
+    class FlakySource:
+        width, height, fps = 8, 8, 240
+
+        def __init__(self):
+            self._attempts = 0
+
+        async def read(self):
+            self._attempts += 1
+            if self._attempts == 1:
+                raise FrameSourceError("boom")
+            return np.zeros((self.height, self.width, 3), dtype=np.uint8)
+
+        async def close(self):
+            pass
+
+    calls: list[int] = []
+
+    async def scenario():
+        track = LeRobotCameraTrack(
+            FlakySource(),
+            width=8,
+            height=8,
+            stale_frame_max_age_s=0.0,
+            on_recover=lambda: calls.append(1),
+        )
+        await track.recv()  # failure -> black fallback
+        await track.recv()  # recovery -> on_recover fires
+        await track.recv()  # steady state -> no extra fires
+        return track.consecutive_failures
+
+    failures = _run(scenario())
+    assert failures == 0
+    assert len(calls) == 1, f"on_recover should fire exactly once, got {len(calls)}"
+
+
 def test_track_resizes_when_quality_changes():
     async def scenario():
         source = StubFrameSource(width=64, height=48, fps=240)
@@ -168,6 +208,58 @@ def test_create_session_handshake_completes_and_closes():
 
         await manager.close_session(session.session_id)
         assert manager.get(session.session_id) is None
+        await browser.close()
+
+    _run(scenario())
+
+
+def test_request_keyframe_and_bitrate_apply_to_live_encoder():
+    """A live encoder on the sender should accept target_bitrate on keyframe."""
+
+    class _FakeEncoder:
+        def __init__(self):
+            self.target_bitrate = 0
+
+    manager = SignalingManager(StubFrameSourceProvider(width=16, height=12, fps=120))
+
+    async def scenario():
+        browser = RTCPeerConnection()
+        browser.addTransceiver("video", direction="recvonly")
+        offer = await browser.createOffer()
+        await browser.setLocalDescription(offer)
+
+        session, _ = await manager.create_session(
+            robot_id="r1",
+            camera_id="cam0",
+            offer_sdp=browser.localDescription.sdp,
+            offer_type=browser.localDescription.type,
+        )
+
+        # Simulate aiortc having instantiated the encoder by injecting a fake
+        # into the sender's name-mangled __encoder slot.
+        fake = _FakeEncoder()
+        for sender in session.pc.getSenders():
+            if sender.track is not None and sender.track.kind == "video":
+                sender._RTCRtpSender__encoder = fake
+
+        # PATCH quality should push the new bitrate onto the live encoder.
+        await manager.update_quality(
+            session.session_id,
+            QualitySettings(bitrate_kbps=1234),
+        )
+        assert fake.target_bitrate == 1234 * 1000
+        assert session.desired_bitrate_bps == 1234 * 1000
+
+        # request_keyframe re-asserts the bitrate and bumps the counter.
+        signalled = await manager.request_keyframe(session.session_id)
+        assert signalled >= 1
+        assert session.keyframes_requested == signalled
+        # Change encoder bitrate behind our back and verify keyframe restores it.
+        fake.target_bitrate = 42
+        await manager.request_keyframe(session.session_id)
+        assert fake.target_bitrate == 1234 * 1000
+
+        await manager.close_session(session.session_id)
         await browser.close()
 
     _run(scenario())
@@ -305,6 +397,17 @@ def test_router_offer_ice_stats_quality_stop_cycle():
                 json={"bitrate_kbps": 500},
             )
             assert missing.status_code == 404
+
+            # Keyframe route returns the count of signalled senders.
+            kf_resp = client.post(f"/api/streams/{sid}/keyframe")
+            assert kf_resp.status_code == 200, kf_resp.text
+            kf_body = kf_resp.json()
+            assert kf_body["session_id"] == sid
+            assert kf_body["senders_signalled"] >= 1
+
+            # Keyframe on unknown session -> 404.
+            missing_kf = client.post("/api/streams/does-not-exist/keyframe")
+            assert missing_kf.status_code == 404
 
             # Stop is idempotent.
             stop_resp = client.post(f"/api/streams/{sid}/stop")
