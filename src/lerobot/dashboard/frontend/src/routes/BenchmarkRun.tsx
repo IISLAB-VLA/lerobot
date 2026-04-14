@@ -26,7 +26,6 @@ import {
   cancelBenchmarkRun,
   isTerminalStatus,
   runnerLabel,
-  type BenchmarkRunSummary,
   type RunStatus,
 } from "@/lib/api/benchmarks";
 import { useBenchmarkRun } from "@/hooks/useBenchmarkRun";
