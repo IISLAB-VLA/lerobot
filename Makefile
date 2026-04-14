@@ -178,3 +178,17 @@ test-smolvla-ete-eval:
 		--env.episode_length=5 \
 		--eval.n_episodes=1 \
 		--eval.batch_size=1
+
+# --- Dashboard frontend ---
+DASHBOARD_FRONTEND_DIR := src/lerobot/dashboard/frontend
+
+.PHONY: dashboard-frontend dashboard-frontend-dev dashboard-frontend-install
+
+dashboard-frontend-install:
+	cd $(DASHBOARD_FRONTEND_DIR) && npm ci
+
+dashboard-frontend:
+	cd $(DASHBOARD_FRONTEND_DIR) && npm ci && npm run build
+
+dashboard-frontend-dev:
+	cd $(DASHBOARD_FRONTEND_DIR) && npm run dev

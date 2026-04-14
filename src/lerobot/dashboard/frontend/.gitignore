@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-ssr
+*.local
+.vite
+.env
+.env.*
+!.env.example
+.DS_Store
+*.tsbuildinfo
+
+# Override project-root ignores that hit our source folders.
+!src/lib/
+!src/lib/**
