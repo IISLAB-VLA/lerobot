@@ -6,6 +6,13 @@ from fastapi import HTTPException, Request, status
 
 from lerobot.dashboard.services.assets import AssetManager
 from lerobot.dashboard.services.camera_manager import CameraManagerProtocol
+from lerobot.dashboard.services.inference import (
+    InferenceConflictError,
+    InferenceError,
+    InferenceNotFoundError,
+    InferenceService,
+    InferenceValidationError,
+)
 from lerobot.dashboard.services.recorder import (
     RecorderConflictError,
     RecorderError,
@@ -106,5 +113,26 @@ def map_recorder_error(exc: RecorderError) -> HTTPException:
     if isinstance(exc, RecorderValidationError):
         return HTTPException(status_code=422, detail=str(exc))
     if isinstance(exc, RecorderConflictError):
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+
+def get_inference(request: Request) -> InferenceService:
+    state = request.app.state.dashboard
+    inference = state.inference
+    if inference is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="inference service is not initialized",
+        )
+    return inference
+
+
+def map_inference_error(exc: InferenceError) -> HTTPException:
+    if isinstance(exc, InferenceNotFoundError):
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    if isinstance(exc, InferenceValidationError):
+        return HTTPException(status_code=422, detail=str(exc))
+    if isinstance(exc, InferenceConflictError):
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
