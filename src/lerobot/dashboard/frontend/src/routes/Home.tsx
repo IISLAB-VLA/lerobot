@@ -73,7 +73,7 @@ function HealthRow({ status, data, error, isFetching }: HealthRowProps): JSX.Ele
       <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden />
       <span className="font-medium">{data?.status ?? "ok"}</span>
       {data ? (
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="font-mono text-sm text-foreground/70">
           v{data.version} · py{data.python} · uptime {data.uptime_seconds.toFixed(1)}s
         </span>
       ) : null}

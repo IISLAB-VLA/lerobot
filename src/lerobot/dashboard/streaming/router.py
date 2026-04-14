@@ -9,6 +9,7 @@ models below.
 * ``POST /api/streams/{sid}/stop`` — tear down a session.
 * ``PATCH /api/streams/{sid}/quality`` — reconfigure encoder on the fly.
 * ``GET /api/streams/{sid}/stats`` — getStats() snapshot for the UI overlay.
+* ``GET /api/streams/stats``       — batch getStats() for many sessions.
 * ``POST /api/streams/{sid}/keyframe`` — force an immediate keyframe.
 """
 
@@ -16,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from lerobot.dashboard.streaming.session import QualitySettings, SignalingManager
@@ -61,6 +62,18 @@ class QualityResponse(BaseModel):
 class StatsResponse(BaseModel):
     session_id: str
     entries: list[dict[str, Any]]
+
+
+class StatsManyResponse(BaseModel):
+    """Batch response for the multi-session stats overlay.
+
+    Sessions that are missing at query time (either never existed or were
+    just closed) are omitted from ``sessions`` — the UI should treat their
+    absence as "unsubscribe this tile", matching the soft-delete behaviour
+    of the frontend's `useStreamStats` hook.
+    """
+
+    sessions: list[StatsResponse]
 
 
 class KeyframeResponse(BaseModel):
@@ -128,6 +141,28 @@ def build_streams_router() -> APIRouter:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="session not found") from exc
         return QualityResponse(**merged.__dict__)
+
+    @router.get("/stats", response_model=StatsManyResponse)
+    async def get_stats_batch(
+        request: Request,
+        session_ids: str | None = Query(
+            default=None,
+            description=(
+                "Optional comma-separated allowlist. When omitted, every "
+                "active session is returned."
+            ),
+        ),
+    ) -> StatsManyResponse:
+        manager = _manager(request)
+        ids: list[str] | None
+        if session_ids is None or session_ids == "":
+            ids = None
+        else:
+            ids = [sid for sid in (s.strip() for s in session_ids.split(",")) if sid]
+        results = await manager.stats_many(ids)
+        return StatsManyResponse(
+            sessions=[StatsResponse(session_id=sid, entries=entries) for sid, entries in results]
+        )
 
     @router.get("/{session_id}/stats", response_model=StatsResponse)
     async def get_stats(session_id: str, request: Request) -> StatsResponse:
