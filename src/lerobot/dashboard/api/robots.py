@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from uuid import UUID
 
@@ -9,17 +10,45 @@ from fastapi import APIRouter, Body, Depends, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from lerobot.dashboard.api._deps import (
+    get_assets,
     get_registry,
     get_robot_manager,
     map_registry_error,
 )
+from lerobot.dashboard.services.assets import AssetManager
 from lerobot.dashboard.services.registry import Registry, RegistryError
 from lerobot.dashboard.services.registry_models import (
     Connection,
+    NetworkConnection,
     RobotEntry,
     RobotStatus,
 )
 from lerobot.dashboard.services.robot_manager import RobotManagerProtocol
+
+# Well-known port → NetworkProtocol mapping. Only upgrades ``custom`` in the
+# payload; explicit user choices are always preserved. Kept in sync with
+# :data:`lerobot.dashboard.api.devices._PROTOCOL_DEFAULT_PORT` by convention.
+_PROTOCOL_BY_DEFAULT_PORT: dict[int, str] = {30004: "rtde", 10001: "fci"}
+
+
+def _maybe_upgrade_network_protocol(conn: Connection) -> Connection:
+    """Promote ``custom`` to a well-known NetworkProtocol based on the port.
+
+    ``connection.protocol == "custom"`` is the opt-in: when the user gives
+    us a host + port but hasn't picked a specific protocol, we try to guess
+    from well-known ports (30004 → rtde, 10001 → fci). Explicit user
+    choices (rtde, fci, xmlrpc, websocket) are never changed — we must not
+    downgrade ``rtde`` on port 5555 back to something else.
+    """
+    if not isinstance(conn, NetworkConnection):
+        return conn
+    if conn.protocol != "custom":
+        return conn
+    upgraded = _PROTOCOL_BY_DEFAULT_PORT.get(conn.port)
+    if upgraded is None:
+        return conn
+    return conn.model_copy(update={"protocol": upgraded})
+
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +81,18 @@ async def list_robots(registry: Registry = Depends(get_registry)) -> list[RobotE
 async def create_robot(
     payload: RobotCreateRequest,
     registry: Registry = Depends(get_registry),
+    assets: AssetManager = Depends(get_assets),
 ) -> RobotEntry:
-    entry = RobotEntry(**payload.model_dump())
+    updates: dict[str, object] = {
+        "connection": _maybe_upgrade_network_protocol(payload.connection),
+    }
+    if payload.image_ref is None:
+        # AssetManager.resolve_url may block on download; keep the event loop
+        # free. It falls back to the generic icon on any error, so the final
+        # value is always a valid /resources URL.
+        updates["image_ref"] = await asyncio.to_thread(assets.resolve_url, payload.robot_type)
+    resolved = payload.model_copy(update=updates)
+    entry = RobotEntry(**resolved.model_dump())
     try:
         return await registry.create_robot(entry)
     except RegistryError as exc:
@@ -74,6 +113,20 @@ async def update_robot(
     patch: dict = Body(...),
     registry: Registry = Depends(get_registry),
 ) -> RobotEntry:
+    # Apply the same network-protocol auto-upgrade to patches that replace
+    # the connection payload, so PATCH doesn't silently bypass the rule.
+    raw_conn = patch.get("connection")
+    if isinstance(raw_conn, dict) and raw_conn.get("kind") == "network":
+        from pydantic import TypeAdapter
+
+        try:
+            typed = TypeAdapter(NetworkConnection).validate_python(raw_conn)
+        except Exception:
+            # Defer validation error reporting to the registry's model_validate round-trip.
+            typed = None
+        if typed is not None:
+            resolved = _maybe_upgrade_network_protocol(typed)
+            patch = {**patch, "connection": resolved.model_dump()}
     try:
         return await registry.update_robot(robot_id, patch)
     except RegistryError as exc:
