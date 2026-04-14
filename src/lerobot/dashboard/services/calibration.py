@@ -43,6 +43,10 @@ logger = logging.getLogger(__name__)
 # Sentinel put on a subscriber queue when the session terminates.
 _TERMINAL = object()
 
+# joint_feedback publish rate. 10 Hz is gentle on the Feetech SDK (SO-101)
+# while still giving the UI a smooth live readout. Frontend throttles to ~5 FPS.
+JOINT_FEEDBACK_HZ = 10.0
+
 
 # ---------------------------------------------------------------------------
 # Error taxonomy (mapped to HTTP codes in the REST layer)
@@ -242,11 +246,14 @@ class _Session:
     robot_id: UUID
     robot_type: str
     plan: tuple[CalibrationStep, ...]
+    robot_manager: RobotManagerProtocol
     step_index: int = 0
     progress: float = 0.0
     awaiting_user_input: bool = True
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     subscribers: list[asyncio.Queue[Any]] = field(default_factory=list)
+    feedback_task: asyncio.Task[None] | None = None
+    terminated: bool = False
 
     @property
     def current_step(self) -> CalibrationStep:
@@ -293,9 +300,14 @@ class CalibrationController:
                 robot_id=robot_id,
                 robot_type=robot_type,
                 plan=plan,
+                robot_manager=robot_manager,
             )
             self._sessions[robot_id] = session
             self._publish_step_locked(session)
+            session.feedback_task = asyncio.create_task(
+                self._feedback_loop(session),
+                name=f"calibration-feedback-{session.session_id}",
+            )
 
         return CalibrationStartResponse(
             session_id=session.session_id,
@@ -416,6 +428,7 @@ class CalibrationController:
         result: Literal["ok", "error", "cancelled"],
         error: dict[str, str] | None = None,
     ) -> None:
+        session.terminated = True
         summary = CalibrationSummary(
             robot_type=session.robot_type,
             calibration_id=session.session_id,
@@ -437,6 +450,46 @@ class CalibrationController:
         session.subscribers.clear()
         self._sessions.pop(session.robot_id, None)
         self._latest[session.robot_id] = summary
+
+    async def _feedback_loop(self, session: _Session) -> None:
+        """Pull ``robot_manager.read_observation`` at :data:`JOINT_FEEDBACK_HZ`.
+
+        Only numeric scalar values are forwarded; camera frames and other
+        non-numeric observation keys are dropped so the WS payload stays
+        small. Exits when the session terminates; swallows read errors
+        because they shouldn't take down the calibration wizard.
+        """
+        interval = 1.0 / JOINT_FEEDBACK_HZ
+        try:
+            while True:
+                if session.terminated:
+                    return
+                try:
+                    obs = await session.robot_manager.read_observation(session.robot_id)
+                except Exception:  # noqa: BLE001 — transient read error must not kill session
+                    logger.debug(
+                        "calibration %s joint_feedback read failed",
+                        session.session_id,
+                        exc_info=True,
+                    )
+                    obs = {}
+                values = {k: float(v) for k, v in obs.items() if isinstance(v, (int, float))}
+                if values:
+                    async with self._lock:
+                        if session.terminated:
+                            return
+                        event: dict[str, Any] = {
+                            "type": "joint_feedback",
+                            "session_id": session.session_id,
+                            "step_id": session.current_step.step_id,
+                            "values": values,
+                            "timestamp_ms": int(datetime.now(UTC).timestamp() * 1000),
+                        }
+                        for queue in list(session.subscribers):
+                            _enqueue_drop_oldest(queue, event)
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            return
 
 
 def _enqueue_drop_oldest(queue: asyncio.Queue[Any], item: Any) -> None:
