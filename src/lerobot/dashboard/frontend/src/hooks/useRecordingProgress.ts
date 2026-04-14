@@ -79,6 +79,12 @@ export function useRecordingProgress({
           const parsed = JSON.parse(ev.data) as RecordingProgressEvent;
           if (parsed && typeof parsed.type === "string") {
             setEvent(parsed);
+            // Terminal events — server closes the socket after sending these.
+            // Mark as non-retryable so the close handler doesn't schedule a
+            // reconnect before the parent component has a chance to unmount.
+            if (parsed.type === "stopped" || parsed.type === "error") {
+              retryableRef.current = false;
+            }
           }
         } catch {
           // ignore malformed frames
