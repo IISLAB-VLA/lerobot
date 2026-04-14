@@ -9,6 +9,7 @@ models below.
 * ``POST /api/streams/{sid}/stop`` — tear down a session.
 * ``PATCH /api/streams/{sid}/quality`` — reconfigure encoder on the fly.
 * ``GET /api/streams/{sid}/stats`` — getStats() snapshot for the UI overlay.
+* ``POST /api/streams/{sid}/keyframe`` — force an immediate keyframe.
 """
 
 from __future__ import annotations
@@ -60,6 +61,11 @@ class QualityResponse(BaseModel):
 class StatsResponse(BaseModel):
     session_id: str
     entries: list[dict[str, Any]]
+
+
+class KeyframeResponse(BaseModel):
+    session_id: str
+    senders_signalled: int
 
 
 def _manager(request: Request) -> SignalingManager:
@@ -131,5 +137,14 @@ def build_streams_router() -> APIRouter:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="session not found") from exc
         return StatsResponse(session_id=session_id, entries=entries)
+
+    @router.post("/{session_id}/keyframe", response_model=KeyframeResponse)
+    async def post_keyframe(session_id: str, request: Request) -> KeyframeResponse:
+        manager = _manager(request)
+        try:
+            signalled = await manager.request_keyframe(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="session not found") from exc
+        return KeyframeResponse(session_id=session_id, senders_signalled=signalled)
 
     return router

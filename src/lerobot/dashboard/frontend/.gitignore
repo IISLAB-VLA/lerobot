@@ -9,6 +9,9 @@ dist-ssr
 .DS_Store
 *.tsbuildinfo
 
+# openapi-typescript intermediate schema (regenerated on demand)
+openapi.schema.json
+
 # Override project-root ignores that hit our source folders.
 !src/lib/
 !src/lib/**

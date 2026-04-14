@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "generate:api-types": "uv run --no-sync python -m lerobot.dashboard.dev.dump_openapi openapi.schema.json && openapi-typescript openapi.schema.json -o src/lib/api/schema.d.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",
@@ -36,6 +37,7 @@
     "eslint": "^8.57.1",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",
+    "openapi-typescript": "^7.4.3",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",

@@ -72,8 +72,10 @@ function HealthRow({ status, data, error, isFetching }: HealthRowProps): JSX.Ele
     <div className="flex items-center gap-2">
       <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden />
       <span className="font-medium">{data?.status ?? "ok"}</span>
-      {data?.version ? (
-        <span className="font-mono text-xs text-muted-foreground">v{data.version}</span>
+      {data ? (
+        <span className="font-mono text-xs text-muted-foreground">
+          v{data.version} · py{data.python} · uptime {data.uptime_seconds.toFixed(1)}s
+        </span>
       ) : null}
       {isFetching ? (
         <Loader2 className="ml-2 h-3 w-3 animate-spin text-muted-foreground" aria-hidden />

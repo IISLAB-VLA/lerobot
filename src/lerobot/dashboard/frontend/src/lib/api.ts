@@ -9,8 +9,10 @@ export const api: AxiosInstance = axios.create({
 });
 
 export interface HealthResponse {
-  status: string;
-  version?: string;
+  status: "ok";
+  version: string;
+  python: string;
+  uptime_seconds: number;
 }
 
 export async function fetchHealth(): Promise<HealthResponse> {
