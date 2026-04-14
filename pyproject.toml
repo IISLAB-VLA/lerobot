@@ -118,6 +118,20 @@ viz = [
 # ── User-facing composite extras (map to CLI scripts) ─────
 # lerobot-record, lerobot-replay, lerobot-calibrate, lerobot-teleoperate, etc.
 core_scripts = ["lerobot[dataset]", "lerobot[hardware]", "lerobot[viz]"]
+# lerobot-dashboard -- web dashboard (FastAPI + WebRTC + websockets) for teleop, recording, inference.
+dashboard = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "aiortc>=1.9.0",
+    "av>=13.0.0",
+    "websockets>=13.0",
+    "pydantic>=2.8",
+    "pyserial>=3.5",
+    "aiofiles>=24.1.0",
+    "python-multipart>=0.0.9",
+    "huggingface-hub>=0.34.4",
+    "lerobot[core_scripts]",
+]
 # lerobot-eval -- base evaluation framework. You also need the policy's extra (e.g., lerobot[pi])
 # and the environment's extra (e.g., lerobot[pusht]) if evaluating in simulation.
 evaluation = ["lerobot[av-dep]"]
@@ -251,6 +265,7 @@ all = [
     "lerobot[metaworld]",
     "lerobot[sarm]",
     "lerobot[peft]",
+    "lerobot[dashboard]",
     # "lerobot[unitree_g1]", TODO: Unitree requires specific installation instructions for unitree_sdk2
 ]
 
@@ -271,6 +286,7 @@ lerobot-find-joint-limits="lerobot.scripts.lerobot_find_joint_limits:main"
 lerobot-imgtransform-viz="lerobot.scripts.lerobot_imgtransform_viz:main"
 lerobot-edit-dataset="lerobot.scripts.lerobot_edit_dataset:main"
 lerobot-setup-can="lerobot.scripts.lerobot_setup_can:main"
+lerobot-dashboard="lerobot.dashboard.cli:main"
 
 # ---------------- Tool Configurations ----------------
 # Route torch/torchvision to the CUDA 13.0 wheel index on Linux.

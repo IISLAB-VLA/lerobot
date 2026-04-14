@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.PHONY: tests
+.PHONY: tests dashboard-e2e dashboard-e2e-install
 
 PYTHON_PATH := $(shell which python)
 
@@ -28,6 +28,14 @@ DEVICE ?= cpu
 
 build-user:
 	docker build -f docker/Dockerfile.user -t lerobot-user .
+
+# Dashboard E2E suite (Playwright + gemini-vision visual QA).
+# Spawns `uv run lerobot-dashboard` internally; requires the 'dashboard' extra installed.
+dashboard-e2e-install:
+	cd tests/dashboard/e2e && npm install && npx playwright install --with-deps chromium
+
+dashboard-e2e:
+	cd tests/dashboard/e2e && npm test
 
 build-internal:
 	docker build -f docker/Dockerfile.internal -t lerobot-internal .
