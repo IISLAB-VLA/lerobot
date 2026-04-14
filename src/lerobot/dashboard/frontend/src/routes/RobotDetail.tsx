@@ -19,6 +19,7 @@ import {
 } from "@/components/streaming/layouts";
 import { StreamLayout } from "@/components/streaming/StreamLayout";
 import { useStreamStageShortcuts } from "@/hooks/useStreamStageShortcuts";
+import { TeleopPanel } from "@/components/teleop/TeleopPanel";
 
 async function listCameras(): Promise<CameraEntry[]> {
   try {
@@ -157,6 +158,10 @@ export function RobotDetailPage(): JSX.Element {
           />
         </div>
       </header>
+
+      {import.meta.env.VITE_ENABLE_TELEOP === "1" ? (
+        <TeleopPanel robotId={robot.id} enabled={statusKind === "online"} />
+      ) : null}
 
       <section
         ref={stageRef}
