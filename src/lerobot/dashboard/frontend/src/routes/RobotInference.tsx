@@ -291,6 +291,7 @@ export function RobotInferencePage(): JSX.Element {
           deadmanPending={deadmanMutation.isPending}
           supportsLanguage={selectedPolicy?.supports_language ?? false}
           running={Boolean(running)}
+          maxActionMagnitude={parsedMaxAction}
         />
       </div>
     </div>
@@ -525,6 +526,7 @@ interface SessionPanelProps {
   deadmanPending: boolean;
   supportsLanguage: boolean;
   running: boolean;
+  maxActionMagnitude: number | null;
 }
 
 function SessionPanel({
@@ -539,6 +541,7 @@ function SessionPanel({
   deadmanPending,
   supportsLanguage,
   running,
+  maxActionMagnitude,
 }: SessionPanelProps): JSX.Element {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -593,6 +596,15 @@ function SessionPanel({
               />
               {deadmanHeld ? "deadman: held" : "deadman: release"}
               {deadmanPending ? " …" : ""}
+            </span>
+          ) : null}
+          {maxActionMagnitude !== null && running && !activeSession?.dry_run ? (
+            <span
+              data-testid="inference-safety-clamp"
+              className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"
+              title={`Action elements clamped to ±${maxActionMagnitude}`}
+            >
+              clamp ±{maxActionMagnitude}
             </span>
           ) : null}
           <span

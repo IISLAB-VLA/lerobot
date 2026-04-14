@@ -5,6 +5,7 @@ import { useWebRTCStream } from "@/hooks/useWebRTCStream";
 import type { CameraEntry } from "@/lib/api/robots";
 import { Button } from "@/components/ui/button";
 import { postKeyframe, type ParsedStreamStats } from "@/lib/api/streams";
+import { CameraSettingsDrawer } from "@/components/streaming/CameraSettingsDrawer";
 
 interface VideoTileProps {
   robotId: string;
@@ -119,20 +120,23 @@ function VideoTileImpl({
         className="h-full w-full bg-black object-contain"
       />
       {overlay}
-      <button
-        type="button"
-        onClick={onToggleFullscreen}
-        aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-        title={isFullscreen ? "Exit fullscreen" : "Fullscreen this tile"}
-        data-testid="video-tile-fullscreen"
-        className="absolute left-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded bg-black/45 text-white/80 opacity-0 transition-opacity hover:bg-black/70 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 group-focus-within:opacity-100"
-      >
-        {isFullscreen ? (
-          <Minimize2 className="h-3.5 w-3.5" aria-hidden />
-        ) : (
-          <Maximize2 className="h-3.5 w-3.5" aria-hidden />
-        )}
-      </button>
+      <div className="absolute left-2 top-2 flex items-center gap-1">
+        <button
+          type="button"
+          onClick={onToggleFullscreen}
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          title={isFullscreen ? "Exit fullscreen" : "Fullscreen this tile"}
+          data-testid="video-tile-fullscreen"
+          className="inline-flex h-7 w-7 items-center justify-center rounded bg-black/45 text-white/80 opacity-0 transition-opacity hover:bg-black/70 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 group-focus-within:opacity-100"
+        >
+          {isFullscreen ? (
+            <Minimize2 className="h-3.5 w-3.5" aria-hidden />
+          ) : (
+            <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+          )}
+        </button>
+        <CameraSettingsDrawer cameraId={camera.id} cameraName={camera.name} />
+      </div>
       {showStats && stats ? (
         <dl
           className="pointer-events-none absolute right-2 top-2 grid grid-cols-[auto_auto] gap-x-2 gap-y-0.5 rounded bg-black/65 px-2 py-1 text-[10px] font-mono text-white/85"
