@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, Request, status
 
+from lerobot.dashboard.services.assets import AssetManager
 from lerobot.dashboard.services.camera_manager import CameraManagerProtocol
 from lerobot.dashboard.services.registry import (
     Registry,
@@ -47,6 +48,17 @@ def get_camera_manager(request: Request) -> CameraManagerProtocol:
             detail="camera manager is not initialized",
         )
     return manager
+
+
+def get_assets(request: Request) -> AssetManager:
+    state = request.app.state.dashboard
+    assets = state.assets
+    if assets is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="asset manager is not initialized",
+        )
+    return assets
 
 
 def get_teleop_manager(request: Request) -> TeleopManagerProtocol:
