@@ -249,7 +249,7 @@ export function RobotDetailPage(): JSX.Element {
         />
       ) : null}
 
-      {import.meta.env.VITE_ENABLE_TELEOP === "1" ? (
+      {import.meta.env.VITE_ENABLE_TELEOP !== "0" ? (
         <TeleopPanel robotId={robot.id} enabled={statusKind === "online"} />
       ) : null}
 
