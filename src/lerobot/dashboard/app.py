@@ -18,6 +18,7 @@ from lerobot.dashboard.services.assets import RESOURCE_URL_PREFIX, AssetManager
 from lerobot.dashboard.services.benchmark import BenchmarkController
 from lerobot.dashboard.services.calibration import CalibrationController
 from lerobot.dashboard.services.camera_manager import InMemoryCameraManager, LerobotCameraManager
+from lerobot.dashboard.services.inference import InferenceService
 from lerobot.dashboard.services.recorder import RecorderService
 from lerobot.dashboard.services.registry import Registry, registry_path_for
 from lerobot.dashboard.services.robot_manager import InMemoryRobotManager
@@ -101,6 +102,11 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         camera_manager=state.camera_manager,
         datasets_dir=resolved.resolved_dataset_dir(),
     )
+    state.inference = InferenceService(
+        registry=state.registry,
+        robot_manager=state.robot_manager,
+        camera_manager=state.camera_manager,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -118,6 +124,8 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             yield
         finally:
             logger.info("dashboard shutting down")
+            if state.inference is not None:
+                await state.inference.close()
             if state.recorder is not None:
                 await state.recorder.close()
             if state.streaming is not None:

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from lerobot.dashboard.services.benchmark import BenchmarkController
     from lerobot.dashboard.services.calibration import CalibrationController
     from lerobot.dashboard.services.camera_manager import CameraManagerProtocol
+    from lerobot.dashboard.services.inference import InferenceService
     from lerobot.dashboard.services.recorder import RecorderService
     from lerobot.dashboard.services.registry import Registry
     from lerobot.dashboard.services.robot_manager import RobotManagerProtocol
@@ -36,6 +37,7 @@ class AppState:
     teleop_manager: TeleopManagerProtocol | None = None
     streaming: SignalingManager | None = None
     recorder: RecorderService | None = None
+    inference: InferenceService | None = None
     assets: AssetManager | None = None
     calibration: CalibrationController | None = None
     benchmark: BenchmarkController | None = None
