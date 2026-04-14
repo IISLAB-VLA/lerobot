@@ -10,8 +10,10 @@ from lerobot.dashboard.core.config import DashboardConfig
 
 if TYPE_CHECKING:
     from lerobot.dashboard.services.assets import AssetManager
+    from lerobot.dashboard.services.camera_manager import CameraManagerProtocol
     from lerobot.dashboard.services.registry import Registry
     from lerobot.dashboard.services.robot_manager import RobotManagerProtocol
+    from lerobot.dashboard.services.teleop_manager import TeleopManagerProtocol
     from lerobot.dashboard.streaming import SignalingManager
 
 
@@ -27,6 +29,8 @@ class AppState:
     startup_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     registry: Registry | None = None
     robot_manager: RobotManagerProtocol | None = None
+    camera_manager: CameraManagerProtocol | None = None
+    teleop_manager: TeleopManagerProtocol | None = None
     streaming: SignalingManager | None = None
     assets: AssetManager | None = None
     live_robots: dict[str, Any] = field(default_factory=dict)
