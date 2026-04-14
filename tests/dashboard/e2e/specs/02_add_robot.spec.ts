@@ -112,10 +112,21 @@ test.describe("Add Robot modal", () => {
     const cameraRow = dialog.getByRole("listitem", { name: /Camera 1/i });
     await expect(cameraRow).toBeVisible();
     await cameraRow.getByLabel("Camera name").fill("Front cam");
-    // "Device" label has no htmlFor binding in the modal, so getByLabel misses.
-    // Target the fallback Input by its placeholder. When the envelope bug is
-    // fixed upstream, swap this for .selectOption() on the device dropdown.
-    await cameraRow.getByPlaceholder("/dev/video0").fill("/dev/video1");
+    // "Device" Label lacks htmlFor; pick the last <select> in the row
+    // (order: Source, Resolution, Device). Falls back to Input by placeholder
+    // if the fake-devices list is ever empty again.
+    const deviceControl = cameraRow.locator("select").last();
+    if (await deviceControl.count()) {
+      const opts = await deviceControl.evaluate((el) =>
+        Array.from((el as HTMLSelectElement).options)
+          .map((o) => o.value)
+          .filter((v) => v !== ""),
+      );
+      expect(opts.length).toBeGreaterThan(0);
+      await deviceControl.selectOption(opts[0]);
+    } else {
+      await cameraRow.getByPlaceholder("/dev/video0").fill("/dev/video1");
+    }
 
     await dialog.getByRole("button", { name: /Create robot/i }).click();
     await expect(dialog).toBeHidden({ timeout: 10_000 });
