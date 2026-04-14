@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
@@ -18,6 +18,7 @@ import {
   type StreamLayoutKind,
 } from "@/components/streaming/layouts";
 import { StreamLayout } from "@/components/streaming/StreamLayout";
+import { useStreamStageShortcuts } from "@/hooks/useStreamStageShortcuts";
 
 async function listCameras(): Promise<CameraEntry[]> {
   try {
@@ -34,6 +35,7 @@ export function RobotDetailPage(): JSX.Element {
   const [layout, setLayout] = useState<StreamLayoutKind>("single");
   const [spotlightCameraId, setSpotlightCameraId] = useState<string | null>(null);
   const [streamsEnabled, setStreamsEnabled] = useState(true);
+  const stageRef = useRef<HTMLElement>(null);
 
   const robotsQuery = useQuery<RobotEntry[]>({
     queryKey: ["robots"],
@@ -71,6 +73,13 @@ export function RobotDetailPage(): JSX.Element {
       setLayout("single");
     }
   }, [cameras, layout]);
+
+  useStreamStageShortcuts({
+    stageRef,
+    tileCount: cameras.length,
+    onLayoutChange: setLayout,
+    enabled: cameras.length > 0,
+  });
 
   if (robotsQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading robot…</p>;
@@ -141,7 +150,12 @@ export function RobotDetailPage(): JSX.Element {
         </div>
       </header>
 
-      <section aria-label="Camera streams" className="flex-1">
+      <section
+        ref={stageRef}
+        aria-label="Camera streams"
+        className="flex-1 focus-visible:outline-none"
+        tabIndex={-1}
+      >
         <StreamLayout
           robotId={robot.id}
           cameras={cameras}
@@ -157,7 +171,13 @@ export function RobotDetailPage(): JSX.Element {
           Streams activate once the robot reports <span className="font-medium">online</span>.
           Use <span className="font-mono">POST /api/robots/{robot.id}/connect</span> to bring it up.
         </p>
-      ) : null}
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Shortcuts — <kbd className="rounded border px-1">1</kbd>…<kbd className="rounded border px-1">5</kbd> layout,{" "}
+          <kbd className="rounded border px-1">F</kbd> fullscreen,{" "}
+          <kbd className="rounded border px-1">Esc</kbd> exit fullscreen.
+        </p>
+      )}
     </div>
   );
 }

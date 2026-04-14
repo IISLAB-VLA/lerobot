@@ -79,20 +79,40 @@ export interface RobotStatus {
   connected_at?: string | null;
 }
 
-export interface SerialDeviceInfo {
-  path: string;
+export interface SerialPortInfo {
+  port: string;
+  raw_port: string;
   description?: string | null;
-  vid?: number | null;
-  pid?: number | null;
+  manufacturer?: string | null;
+  product?: string | null;
+  serial_number?: string | null;
+  vid?: string | null;
+  pid?: string | null;
 }
 
-export interface VideoDeviceInfo {
-  path: string;
-  index: number;
-  name?: string | null;
+export interface CameraStreamProfile {
   width?: number | null;
   height?: number | null;
   fps?: number | null;
+  format?: string | null;
+}
+
+export interface CameraDeviceInfo {
+  id: string;
+  backend: "opencv" | "realsense";
+  path?: string | null;
+  index?: number | null;
+  name?: string | null;
+  default_profile?: CameraStreamProfile | null;
+}
+
+interface SerialDiscoveryResponse {
+  ports: SerialPortInfo[];
+}
+
+interface CameraDiscoveryResponse {
+  cameras: CameraDeviceInfo[];
+  realsense_available: boolean;
 }
 
 export interface NetworkProbeResult {
@@ -149,20 +169,20 @@ export async function fetchRobotStatus(id: string): Promise<RobotStatus> {
   }
 }
 
-export async function listSerialDevices(): Promise<SerialDeviceInfo[]> {
+export async function listSerialDevices(): Promise<SerialPortInfo[]> {
   try {
-    const { data } = await api.get<SerialDeviceInfo[]>("/devices/serial");
-    return data;
+    const { data } = await api.get<SerialDiscoveryResponse>("/devices/serial");
+    return data.ports;
   } catch (err) {
     if (isNotFound(err)) return [];
     throw err;
   }
 }
 
-export async function listVideoDevices(): Promise<VideoDeviceInfo[]> {
+export async function listVideoDevices(): Promise<CameraDeviceInfo[]> {
   try {
-    const { data } = await api.get<VideoDeviceInfo[]>("/devices/cameras");
-    return data;
+    const { data } = await api.get<CameraDiscoveryResponse>("/devices/cameras");
+    return data.cameras;
   } catch (err) {
     if (isNotFound(err)) return [];
     throw err;
