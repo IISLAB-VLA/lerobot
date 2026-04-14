@@ -16,10 +16,9 @@ import pytest
 
 from lerobot.dashboard.services.camera_manager import (
     CameraManagerProtocol,
-    CameraStatus,
     LerobotCameraManager,
 )
-from lerobot.dashboard.services.registry_models import CameraEntry, CameraSource
+from lerobot.dashboard.services.registry_models import CameraEntry, CameraSource, CameraStatus
 from lerobot.dashboard.streaming.source import FrameSourceError
 
 
@@ -100,7 +99,7 @@ async def test_open_connects_camera_and_marks_online() -> None:
     assert cam.connected is True
     assert await mgr.is_open(entry.id) is True
     status = await mgr.get_status(entry.id)
-    assert status.online is True
+    assert status.open is True
     assert status.opened_at is not None
 
     await mgr.close(entry.id)
@@ -143,7 +142,7 @@ async def test_fan_out_broadcasts_to_all_subscribers() -> None:
     await mgr.close(entry.id)
 
     status_after = await mgr.get_status(entry.id)
-    assert status_after.online is False
+    assert status_after.open is False
 
 
 async def test_graceful_close_ends_subscriber_without_error() -> None:
@@ -186,7 +185,7 @@ async def test_fatal_capture_error_propagates_as_frame_source_error() -> None:
             await asyncio.wait_for(gen.__anext__(), timeout=1.0)
 
     status = await mgr.get_status(entry.id)
-    assert status.online is False
+    assert status.open is False
     assert status.last_error == "cable yanked"
     await mgr.close(entry.id)
 
@@ -217,7 +216,7 @@ async def test_double_open_is_idempotent() -> None:
     await mgr.open(entry)
     await mgr.open(entry)  # should not create a second slot / reconnect
     status = await mgr.get_status(entry.id)
-    assert status.online is True
+    assert status.open is True
     assert status.subscriber_count == 0
     await mgr.close(entry.id)
 
@@ -239,25 +238,23 @@ async def test_slow_consumer_gets_latest_frame_not_backlog() -> None:
     await mgr.close(entry.id)
 
 
-async def test_status_reports_frames_served() -> None:
+async def test_status_tracks_subscriber_count() -> None:
     cam = _FakeCamera()
     mgr = _manager_with(cam)
     entry = _entry()
     await mgr.open(entry)
 
     gen = mgr.subscribe(entry.id)
-    for _ in range(3):
-        await asyncio.wait_for(gen.__anext__(), timeout=1.0)
+    await asyncio.wait_for(gen.__anext__(), timeout=1.0)
     status = await mgr.get_status(entry.id)
-    assert status.frames_served >= 3
+    assert status.subscriber_count == 1
     await gen.aclose()
     await mgr.close(entry.id)
 
 
 def test_camera_status_defaults_are_offline() -> None:
     s = CameraStatus()
-    assert s.online is False
+    assert s.open is False
     assert s.opened_at is None
     assert s.last_error is None
-    assert s.frames_served == 0
     assert s.subscriber_count == 0

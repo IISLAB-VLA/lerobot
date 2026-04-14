@@ -15,9 +15,10 @@ from lerobot.dashboard.api.router import build_api_router
 from lerobot.dashboard.core.config import DashboardConfig
 from lerobot.dashboard.core.state import AppState
 from lerobot.dashboard.services.assets import RESOURCE_URL_PREFIX, AssetManager
-from lerobot.dashboard.services.camera_manager import InMemoryCameraManager
+from lerobot.dashboard.services.camera_manager import InMemoryCameraManager, LerobotCameraManager
 from lerobot.dashboard.services.registry import Registry, registry_path_for
 from lerobot.dashboard.services.robot_manager import InMemoryRobotManager
+from lerobot.dashboard.services.robot_manager_impl import LerobotRobotManager
 from lerobot.dashboard.services.teleop_manager import InMemoryTeleopManager
 from lerobot.dashboard.storage.paths import ensure_storage_dir
 from lerobot.dashboard.streaming import SignalingManager, StubFrameSourceProvider
@@ -69,8 +70,12 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
     assets = AssetManager(resolved.storage_dir)
     state = AppState(config=resolved, assets=assets)
     state.registry = Registry(registry_path_for(resolved.storage_dir))
-    state.robot_manager = InMemoryRobotManager()
-    state.camera_manager = InMemoryCameraManager()
+    if resolved.fake_devices:
+        state.robot_manager = InMemoryRobotManager()
+        state.camera_manager = InMemoryCameraManager()
+    else:
+        state.robot_manager = LerobotRobotManager()
+        state.camera_manager = LerobotCameraManager()
     state.teleop_manager = InMemoryTeleopManager()
     # Until the Task #6 camera adapter lands the streaming stack is fed by a
     # synthetic frame source. The real provider wraps the camera_manager's
