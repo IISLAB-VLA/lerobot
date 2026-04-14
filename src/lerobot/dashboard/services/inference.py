@@ -567,15 +567,37 @@ class InferenceService:
         ``(None, None)`` when the policy is a test stub (no ``.config``), the
         processor config is not found, or any other error occurs. Those
         sessions use the direct ``select_action`` path in ``_run_policy``.
+
+        ``device_processor`` is overridden with the *actual* device of the
+        loaded policy weights — determined from the first model parameter —
+        rather than trusting the device baked into the saved processor JSON.
+        This prevents a ``CUDABFloat16Type vs CPUBFloat16Type`` mismatch when
+        the policy config's ``device`` field and the processor's
+        ``DeviceProcessorStep.device`` disagree (e.g. both say ``"cuda"`` but
+        the model was loaded on ``"cpu"`` due to a missing CUDA context on
+        the loading thread).
         """
         config = getattr(policy, "config", None)
         if config is None:
             return None, None
+
+        # Resolve the actual device from model parameters, not config.device,
+        # so the preprocessor and model always agree.
+        try:
+            actual_device = str(next(policy.parameters()).device)
+        except (StopIteration, AttributeError):
+            actual_device = getattr(config, "device", None) or "cpu"
+
         try:
             from lerobot.policies.factory import make_pre_post_processors
 
-            preprocessor, postprocessor = await asyncio.to_thread(make_pre_post_processors, config, repo_id)
-            logger.debug("processor pipeline loaded for %s", repo_id)
+            preprocessor, postprocessor = await asyncio.to_thread(
+                make_pre_post_processors,
+                config,
+                repo_id,
+                preprocessor_overrides={"device_processor": {"device": actual_device}},
+            )
+            logger.debug("processor pipeline loaded for %s on %s", repo_id, actual_device)
             return preprocessor, postprocessor
         except Exception as exc:  # noqa: BLE001
             logger.debug("processor pipeline not available for %s: %s", repo_id, exc)
@@ -621,9 +643,15 @@ def _run_policy(
 
         from lerobot.common.control_utils import predict_action
 
-        config = getattr(policy, "config", None)
-        device_str = getattr(config, "device", None) or "cpu"
-        device = torch.device(device_str)
+        # Derive device from actual parameters so prepare_observation_for_inference
+        # moves tensors to the same device as the model weights (avoids
+        # CUDABFloat16Type vs CPUBFloat16Type mismatch when config.device and the
+        # real parameter device diverge — which can happen on the thread pool).
+        try:
+            device = next(policy.parameters()).device
+        except (StopIteration, AttributeError):
+            config = getattr(policy, "config", None)
+            device = torch.device(getattr(config, "device", None) or "cpu")
         return predict_action(
             observation=obs,
             policy=policy,
