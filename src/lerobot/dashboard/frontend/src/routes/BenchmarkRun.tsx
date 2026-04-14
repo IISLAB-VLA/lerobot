@@ -150,11 +150,7 @@ export function BenchmarkRunPage(): JSX.Element {
           ) : null}
           {summary.status === "completed" && summary.result ? (
             <p className="text-xs text-muted-foreground">
-              Completed{" "}
-              {typeof summary.result.episodes_completed === "number"
-                ? `${summary.result.episodes_completed} episodes`
-                : ""}
-              .
+              Completed {summary.result.episodes_completed} episodes.
             </p>
           ) : null}
         </div>
