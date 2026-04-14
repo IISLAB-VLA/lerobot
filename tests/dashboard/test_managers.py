@@ -56,12 +56,12 @@ async def test_camera_open_close_status_cycle() -> None:
     assert await mgr.is_open(entry.id) is False
 
     opened = await mgr.open(entry)
-    assert opened.open is True
+    assert opened.online is True
     assert opened.opened_at is not None
     assert await mgr.is_open(entry.id) is True
 
     closed = await mgr.close(entry.id)
-    assert closed.open is False
+    assert closed.online is False
     assert await mgr.is_open(entry.id) is False
 
 
@@ -152,7 +152,7 @@ async def test_unknown_ids_return_default_status() -> None:
     ghost = uuid4()
 
     cs = await cam.get_status(ghost)
-    assert cs.open is False
+    assert cs.online is False
     assert cs.subscriber_count == 0
 
     ts = await tel.get_status(ghost)

@@ -100,7 +100,7 @@ class InMemoryCameraManager:
             slot = self._slots.setdefault(entry.id, _InMemorySlot())
             slot.entry = entry
             slot.status = CameraStatus(
-                open=True,
+                online=True,
                 last_error=None,
                 opened_at=datetime.now(UTC),
                 subscriber_count=slot.subscribers,
@@ -113,7 +113,7 @@ class InMemoryCameraManager:
             if slot is None:
                 return CameraStatus()
             slot.status = CameraStatus(
-                open=False,
+                online=False,
                 last_error=slot.status.last_error,
                 opened_at=slot.status.opened_at,
                 subscriber_count=slot.subscribers,
@@ -123,7 +123,7 @@ class InMemoryCameraManager:
     async def is_open(self, camera_id: UUID) -> bool:
         async with self._lock:
             slot = self._slots.get(camera_id)
-            return bool(slot and slot.status.open)
+            return bool(slot and slot.status.online)
 
     async def get_status(self, camera_id: UUID) -> CameraStatus:
         async with self._lock:
@@ -146,7 +146,7 @@ class InMemoryCameraManager:
 
     async def subscribe(self, camera_id: UUID) -> AsyncIterator[np.ndarray]:
         slot = self._slots.get(camera_id)
-        if slot is None or slot.entry is None or not slot.status.open:
+        if slot is None or slot.entry is None or not slot.status.online:
             return
         entry = slot.entry
         fps = max(int(entry.fps), 1)
@@ -154,7 +154,7 @@ class InMemoryCameraManager:
         try:
             while True:
                 slot = self._slots.get(camera_id)
-                if slot is None or not slot.status.open:
+                if slot is None or not slot.status.online:
                     return
                 yield np.zeros((entry.height, entry.width, 3), dtype=np.uint8)
                 await asyncio.sleep(1.0 / fps)
@@ -223,7 +223,6 @@ class _LiveSlot:
     subscribers: list[asyncio.Queue[Any]] = field(default_factory=list)
     stop_event: asyncio.Event = field(default_factory=asyncio.Event)
     task: asyncio.Task[None] | None = None
-    frames_served: int = 0
 
 
 class LerobotCameraManager:
@@ -263,7 +262,7 @@ class LerobotCameraManager:
         slot = _LiveSlot(
             entry=entry,
             camera=camera,
-            status=CameraStatus(open=True, opened_at=datetime.now(UTC)),
+            status=CameraStatus(online=True, opened_at=datetime.now(UTC)),
         )
         async with self._lock:
             if entry.id in self._slots:
@@ -295,17 +294,18 @@ class LerobotCameraManager:
         except Exception:
             logger.exception("disconnect failed for camera %s", camera_id)
         closed = CameraStatus(
-            open=False,
+            online=False,
             last_error=slot.status.last_error,
             opened_at=slot.status.opened_at,
             subscriber_count=0,
+            frames_served=slot.status.frames_served,
         )
         return closed
 
     async def is_open(self, camera_id: UUID) -> bool:
         async with self._lock:
             slot = self._slots.get(camera_id)
-            return bool(slot and slot.status.open)
+            return bool(slot and slot.status.online)
 
     async def get_status(self, camera_id: UUID) -> CameraStatus:
         async with self._lock:
@@ -329,7 +329,7 @@ class LerobotCameraManager:
         queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=1)
         async with self._lock:
             slot = self._slots.get(camera_id)
-            if slot is None or not slot.status.open:
+            if slot is None or not slot.status.online:
                 raise FrameSourceError(f"camera {camera_id} is not open")
             slot.subscribers.append(queue)
         try:
@@ -360,7 +360,7 @@ class LerobotCameraManager:
             except Exception as exc:
                 message = str(exc) or exc.__class__.__name__
                 logger.warning("camera %s capture error: %s", slot.entry.id, message)
-                slot.status = slot.status.model_copy(update={"open": False, "last_error": message})
+                slot.status = slot.status.model_copy(update={"online": False, "last_error": message})
                 err = FrameSourceError(f"camera {slot.entry.id}: {message}")
                 for q in list(slot.subscribers):
                     _enqueue_drop_oldest(q, err)
@@ -370,7 +370,9 @@ class LerobotCameraManager:
                 continue
             for q in list(slot.subscribers):
                 _enqueue_drop_oldest(q, frame)
-            slot.frames_served += 1
+            slot.status = slot.status.model_copy(
+                update={"frames_served": slot.status.frames_served + 1}
+            )
 
 
 # ---------------------------------------------------------------------------
