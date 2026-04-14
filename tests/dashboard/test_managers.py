@@ -17,11 +17,13 @@ from lerobot.dashboard.services.registry_models import (
     TeleopEntry,
 )
 from lerobot.dashboard.services.teleop_manager import (
-    GamepadEvent,
     InMemoryTeleopManager,
-    KeyboardEvent,
-    TeleopEvent,
     TeleopManagerProtocol,
+)
+from lerobot.dashboard.teleop.protocol import (
+    GamepadEvent,
+    KeyboardEvent,
+    parse_teleop_event,
 )
 
 
@@ -54,12 +56,12 @@ async def test_camera_open_close_status_cycle() -> None:
     assert await mgr.is_open(entry.id) is False
 
     opened = await mgr.open(entry)
-    assert opened.open is True
+    assert opened.online is True
     assert opened.opened_at is not None
     assert await mgr.is_open(entry.id) is True
 
     closed = await mgr.close(entry.id)
-    assert closed.open is False
+    assert closed.online is False
     assert await mgr.is_open(entry.id) is False
 
 
@@ -126,10 +128,14 @@ async def test_teleop_handle_input_records_while_attached() -> None:
     await mgr.attach(entry, uuid4())
 
     await mgr.handle_input(entry.id, KeyboardEvent(key="w", pressed=True))
-    await mgr.handle_input(entry.id, GamepadEvent(axes=[0.1, -0.2], buttons=[True, False]))
+    await mgr.handle_input(entry.id, GamepadEvent(axes=(0.1, -0.2), buttons=(True, False)))
 
     events = await mgr.recent_events(entry.id)
-    assert [type(e).__name__ for e in events] == ["KeyboardEvent", "GamepadEvent"]
+    match events:
+        case [KeyboardEvent(key="w", pressed=True), GamepadEvent()]:
+            pass
+        case _:
+            raise AssertionError(f"unexpected event sequence: {events}")
 
 
 async def test_teleop_handle_input_dropped_when_detached() -> None:
@@ -146,7 +152,7 @@ async def test_unknown_ids_return_default_status() -> None:
     ghost = uuid4()
 
     cs = await cam.get_status(ghost)
-    assert cs.open is False
+    assert cs.online is False
     assert cs.subscriber_count == 0
 
     ts = await tel.get_status(ghost)
@@ -161,9 +167,7 @@ async def test_unknown_ids_return_default_status() -> None:
         {"kind": "gamepad", "axes": [0.0, 1.0], "buttons": [True]},
     ],
 )
-def test_teleop_event_tagged_union_round_trip(payload: dict) -> None:
-    """The ``TeleopEvent`` discriminator selects the right concrete type."""
-    from pydantic import TypeAdapter
-
-    event = TypeAdapter(TeleopEvent).validate_python(payload)
-    assert event.kind == payload["kind"]
+def test_parse_teleop_event_selects_concrete_type(payload: dict) -> None:
+    """``parse_teleop_event`` dispatches on the ``kind`` discriminator."""
+    event = parse_teleop_event(payload)
+    assert event.kind.value == payload["kind"]

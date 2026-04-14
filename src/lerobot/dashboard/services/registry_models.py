@@ -218,10 +218,11 @@ class RobotStatus(BaseModel):
 class CameraStatus(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    open: bool = False
+    online: bool = False
     last_error: str | None = None
     opened_at: datetime | None = None
     subscriber_count: int = 0
+    frames_served: int = 0
 
 
 class TeleopStatus(BaseModel):

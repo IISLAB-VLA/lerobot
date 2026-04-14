@@ -20,7 +20,10 @@ from lerobot.dashboard.services.registry import Registry, registry_path_for
 from lerobot.dashboard.services.robot_manager import InMemoryRobotManager
 from lerobot.dashboard.services.teleop_manager import InMemoryTeleopManager
 from lerobot.dashboard.storage.paths import ensure_storage_dir
-from lerobot.dashboard.streaming import SignalingManager, StubFrameSourceProvider
+from lerobot.dashboard.streaming import (
+    RegistryFrameSourceProvider,
+    SignalingManager,
+)
 from lerobot.dashboard.ws.router import build_ws_router
 
 logger = logging.getLogger(__name__)
@@ -72,10 +75,16 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
     state.robot_manager = InMemoryRobotManager()
     state.camera_manager = InMemoryCameraManager()
     state.teleop_manager = InMemoryTeleopManager()
-    # Until the Task #6 camera adapter lands the streaming stack is fed by a
-    # synthetic frame source. The real provider wraps the camera_manager's
-    # ``subscribe()`` iterator and is swapped in without touching the router.
-    state.streaming = SignalingManager(StubFrameSourceProvider())
+    # Streaming bridges the camera_manager's ``subscribe()`` into the
+    # WebRTC track. In ``fake_devices`` mode ``state.camera_manager`` is
+    # the in-memory fallback so the wiring still succeeds — frames are
+    # just zero-filled placeholders instead of real captures.
+    state.streaming = SignalingManager(
+        RegistryFrameSourceProvider(
+            manager=state.camera_manager,
+            registry=state.registry,
+        )
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

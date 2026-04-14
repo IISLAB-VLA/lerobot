@@ -5,10 +5,9 @@ this Protocol so the dashboard can load without gamepad/keyboard
 hardware wired up. Task #11 layers a WebSocket endpoint on top that
 forwards :class:`TeleopEvent` payloads through :meth:`handle_input`.
 
-The concrete event classes (Keyboard/Mouse/Gamepad) live here for now
-so :class:`TeleopManagerProtocol` is import-cycle free. Task #11
-consolidates them into :mod:`lerobot.dashboard.teleop.protocol` once
-that module's envelope types stabilise.
+``TeleopEvent`` and the concrete event dataclasses live in
+:mod:`lerobot.dashboard.teleop.protocol` — the WS envelope module owns
+the wire format, this module just forwards already-parsed events.
 """
 
 from __future__ import annotations
@@ -17,51 +16,11 @@ import asyncio
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Annotated, Literal, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag
-
 from lerobot.dashboard.services.registry_models import TeleopEntry, TeleopStatus
-
-
-class KeyboardEvent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["keyboard"] = "keyboard"
-    key: str
-    pressed: bool
-
-
-class MouseEvent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["mouse"] = "mouse"
-    dx: float = 0.0
-    dy: float = 0.0
-    buttons: int = 0
-
-
-class GamepadEvent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["gamepad"] = "gamepad"
-    axes: list[float] = Field(default_factory=list)
-    buttons: list[bool] = Field(default_factory=list)
-
-
-def _teleop_event_discriminator(v: object) -> str | None:
-    if isinstance(v, dict):
-        return v.get("kind")  # type: ignore[return-value]
-    return getattr(v, "kind", None)
-
-
-TeleopEvent = Annotated[
-    Annotated[KeyboardEvent, Tag("keyboard")]
-    | Annotated[MouseEvent, Tag("mouse")]
-    | Annotated[GamepadEvent, Tag("gamepad")],
-    Discriminator(_teleop_event_discriminator),
-]
+from lerobot.dashboard.teleop.protocol import TeleopEvent
 
 
 @runtime_checkable
