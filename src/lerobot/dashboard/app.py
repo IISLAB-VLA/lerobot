@@ -15,6 +15,7 @@ from lerobot.dashboard.api.router import build_api_router
 from lerobot.dashboard.core.config import DashboardConfig
 from lerobot.dashboard.core.state import AppState
 from lerobot.dashboard.services.assets import RESOURCE_URL_PREFIX, AssetManager
+from lerobot.dashboard.services.calibration import CalibrationController
 from lerobot.dashboard.services.camera_manager import InMemoryCameraManager, LerobotCameraManager
 from lerobot.dashboard.services.registry import Registry, registry_path_for
 from lerobot.dashboard.services.robot_manager import InMemoryRobotManager
@@ -77,6 +78,7 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         state.robot_manager = LerobotRobotManager()
         state.camera_manager = LerobotCameraManager()
     state.teleop_manager = InMemoryTeleopManager()
+    state.calibration = CalibrationController()
     # Until the Task #6 camera adapter lands the streaming stack is fed by a
     # synthetic frame source. The real provider wraps the camera_manager's
     # ``subscribe()`` iterator and is swapped in without touching the router.

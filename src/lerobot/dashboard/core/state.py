@@ -10,6 +10,7 @@ from lerobot.dashboard.core.config import DashboardConfig
 
 if TYPE_CHECKING:
     from lerobot.dashboard.services.assets import AssetManager
+    from lerobot.dashboard.services.calibration import CalibrationController
     from lerobot.dashboard.services.camera_manager import CameraManagerProtocol
     from lerobot.dashboard.services.registry import Registry
     from lerobot.dashboard.services.robot_manager import RobotManagerProtocol
@@ -33,6 +34,7 @@ class AppState:
     teleop_manager: TeleopManagerProtocol | None = None
     streaming: SignalingManager | None = None
     assets: AssetManager | None = None
+    calibration: CalibrationController | None = None
     live_robots: dict[str, Any] = field(default_factory=dict)
     live_cameras: dict[str, Any] = field(default_factory=dict)
     live_teleops: dict[str, Any] = field(default_factory=dict)
