@@ -4,6 +4,94 @@
  */
 
 export interface paths {
+    "/api/cameras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Cameras */
+        get: operations["list_cameras_api_cameras_get"];
+        put?: never;
+        /** Create Camera */
+        post: operations["create_camera_api_cameras_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cameras/{camera_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Camera */
+        get: operations["get_camera_api_cameras__camera_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Camera */
+        delete: operations["delete_camera_api_cameras__camera_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Camera */
+        patch: operations["update_camera_api_cameras__camera_id__patch"];
+        trace?: never;
+    };
+    "/api/devices/cameras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Cameras */
+        get: operations["get_cameras_api_devices_cameras_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/devices/network": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Probe Network */
+        post: operations["probe_network_api_devices_network_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/devices/serial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Serial Ports */
+        get: operations["get_serial_ports_api_devices_serial_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -21,10 +109,364 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/robots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Robots */
+        get: operations["list_robots_api_robots_get"];
+        put?: never;
+        /** Create Robot */
+        post: operations["create_robot_api_robots_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/robots/{robot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Robot */
+        get: operations["get_robot_api_robots__robot_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Robot */
+        delete: operations["delete_robot_api_robots__robot_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Robot */
+        patch: operations["update_robot_api_robots__robot_id__patch"];
+        trace?: never;
+    };
+    "/api/robots/{robot_id}/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Connect Robot */
+        post: operations["connect_robot_api_robots__robot_id__connect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/robots/{robot_id}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disconnect Robot */
+        post: operations["disconnect_robot_api_robots__robot_id__disconnect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/robots/{robot_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Robot Status */
+        get: operations["get_robot_status_api_robots__robot_id__status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/streams/offer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Offer */
+        post: operations["post_offer_api_streams_offer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/streams/{session_id}/ice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ice */
+        post: operations["post_ice_api_streams__session_id__ice_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/streams/{session_id}/keyframe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Keyframe */
+        post: operations["post_keyframe_api_streams__session_id__keyframe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/streams/{session_id}/quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Quality */
+        patch: operations["patch_quality_api_streams__session_id__quality_patch"];
+        trace?: never;
+    };
+    "/api/streams/{session_id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Stats */
+        get: operations["get_stats_api_streams__session_id__stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/streams/{session_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Stop */
+        post: operations["post_stop_api_streams__session_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/teleops": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Teleops */
+        get: operations["list_teleops_api_teleops_get"];
+        put?: never;
+        /** Create Teleop */
+        post: operations["create_teleop_api_teleops_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/teleops/{teleop_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Teleop */
+        get: operations["get_teleop_api_teleops__teleop_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Teleop */
+        delete: operations["delete_teleop_api_teleops__teleop_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Teleop */
+        patch: operations["update_teleop_api_teleops__teleop_id__patch"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CameraCreateRequest */
+        CameraCreateRequest: {
+            /**
+             * Backend
+             * @enum {string}
+             */
+            backend: "opencv" | "realsense" | "network";
+            /** Codec Hint */
+            codec_hint?: string | null;
+            /** Fps */
+            fps: number;
+            /** Height */
+            height: number;
+            /** Name */
+            name: string;
+            source: components["schemas"]["CameraSource"];
+            /** Width */
+            width: number;
+        };
+        /** CameraDiscoveryResponse */
+        CameraDiscoveryResponse: {
+            /** Cameras */
+            cameras: components["schemas"]["CameraInfo"][];
+            /**
+             * Realsense Available
+             * @description False when pyrealsense2 is not importable; the realsense list is then empty.
+             */
+            realsense_available: boolean;
+        };
+        /** CameraEntry */
+        CameraEntry: {
+            /**
+             * Backend
+             * @enum {string}
+             */
+            backend: "opencv" | "realsense" | "network";
+            /**
+             * Codec Hint
+             * @description Optional encoder hint for WebRTC (e.g. 'h264', 'vp9').
+             */
+            codec_hint?: string | null;
+            /** Fps */
+            fps: number;
+            /** Height */
+            height: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id?: string;
+            /** Name */
+            name: string;
+            source: components["schemas"]["CameraSource"];
+            /** Width */
+            width: number;
+        };
+        /** CameraInfo */
+        CameraInfo: {
+            /**
+             * Backend
+             * @enum {string}
+             */
+            backend: "opencv" | "realsense";
+            default_profile?: components["schemas"]["CameraStreamProfile"];
+            /** Extra */
+            extra?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * @description Stable identifier: device path for OpenCV, serial for RealSense.
+             */
+            id: string;
+            /**
+             * Index
+             * @description OpenCV numeric index when applicable.
+             */
+            index?: number | null;
+            /** Name */
+            name?: string | null;
+            /**
+             * Path
+             * @description Filesystem device path (Linux only).
+             */
+            path?: string | null;
+        };
+        /**
+         * CameraSource
+         * @description Where the camera frames come from.
+         *
+         *     Exactly one of ``path`` / ``index`` / ``url`` should be populated
+         *     (enforced at the service layer, not here — keeping the model
+         *     permissive simplifies JSON round-trips during edits).
+         */
+        CameraSource: {
+            /**
+             * Index
+             * @description OpenCV device index.
+             */
+            index?: number | null;
+            /**
+             * Path
+             * @description Filesystem device path (/dev/video0).
+             */
+            path?: string | null;
+            /**
+             * Url
+             * @description RTSP/HTTP stream URL or realsense serial.
+             */
+            url?: string | null;
+        };
+        /** CameraStreamProfile */
+        CameraStreamProfile: {
+            /** Format */
+            format?: string | null;
+            /** Fps */
+            fps?: number | null;
+            /** Height */
+            height?: number | null;
+            /** Width */
+            width?: number | null;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
         /** HealthFlags */
         HealthFlags: {
             /**
@@ -54,6 +496,357 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * IceRequest
+         * @description Browser trickle payload. ``candidate=""`` signals end-of-candidates.
+         */
+        IceRequest: {
+            /**
+             * Candidate
+             * @default
+             */
+            candidate: string;
+            /** Sdpmlineindex */
+            sdpMLineIndex?: number | null;
+            /** Sdpmid */
+            sdpMid?: string | null;
+        };
+        /** KeyframeResponse */
+        KeyframeResponse: {
+            /** Senders Signalled */
+            senders_signalled: number;
+            /** Session Id */
+            session_id: string;
+        };
+        /**
+         * NetworkConnection
+         * @description TCP/UDP hardware link (e.g. UR7e RTDE, arbitrary network robots).
+         */
+        NetworkConnection: {
+            /**
+             * Auth
+             * @description Optional auth material (username/password/token). Never logged.
+             */
+            auth?: {
+                [key: string]: string;
+            } | null;
+            /**
+             * Extra
+             * @description Protocol-specific kwargs (e.g. rtde frequency). Adapter forwards them.
+             */
+            extra?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Host
+             * @description Hostname or IP of the robot controller.
+             */
+            host: string;
+            /**
+             * Kind
+             * @default network
+             * @constant
+             */
+            kind: "network";
+            /**
+             * Port
+             * @description TCP/UDP port.
+             */
+            port: number;
+            /**
+             * Protocol
+             * @description Network protocol flavor. 'rtde' is UR, 'fci' is Franka, etc.
+             * @enum {string}
+             */
+            protocol: "rtde" | "fci" | "xmlrpc" | "websocket" | "custom";
+        };
+        /** NetworkProbeRequest */
+        NetworkProbeRequest: {
+            /** Host */
+            host: string;
+            /** Port */
+            port?: number | null;
+            /**
+             * Protocol
+             * @description Optional protocol hint. When omitted the port default is used (rtde=30004, fci=10001).
+             */
+            protocol?: ("rtde" | "fci" | "tcp") | null;
+            /**
+             * Timeout Ms
+             * @default 1000
+             */
+            timeout_ms: number;
+        };
+        /** NetworkProbeResponse */
+        NetworkProbeResponse: {
+            /** Error */
+            error?: string | null;
+            /** Host */
+            host: string;
+            /** Latency Ms */
+            latency_ms?: number | null;
+            /** Port */
+            port: number;
+            /**
+             * Protocol
+             * @enum {string}
+             */
+            protocol: "rtde" | "fci" | "tcp";
+            /** Reachable */
+            reachable: boolean;
+        };
+        /** OfferRequest */
+        OfferRequest: {
+            /**
+             * Camera Id
+             * @description Registry camera identifier under the robot
+             */
+            camera_id: string;
+            /**
+             * Robot Id
+             * @description Registry robot identifier
+             */
+            robot_id: string;
+            /**
+             * Sdp
+             * @description Browser-generated SDP offer payload
+             */
+            sdp: string;
+            /**
+             * Type
+             * @description SDP type, always 'offer' from the browser
+             * @default offer
+             */
+            type: string;
+        };
+        /** OfferResponse */
+        OfferResponse: {
+            /** Applied Codecs */
+            applied_codecs: string[];
+            /** Sdp */
+            sdp: string;
+            /** Session Id */
+            session_id: string;
+            /** Type */
+            type: string;
+        };
+        /** QualityRequest */
+        QualityRequest: {
+            /** Bitrate Kbps */
+            bitrate_kbps?: number | null;
+            /** Fps */
+            fps?: number | null;
+            /** Height */
+            height?: number | null;
+            /** Width */
+            width?: number | null;
+        };
+        /** QualityResponse */
+        QualityResponse: {
+            /** Bitrate Kbps */
+            bitrate_kbps: number | null;
+            /** Fps */
+            fps: number | null;
+            /** Height */
+            height: number | null;
+            /** Width */
+            width: number | null;
+        };
+        /**
+         * RobotCreateRequest
+         * @description Shape accepted by ``POST /api/robots``.
+         *
+         *     Intentionally omits ``id`` so that clients cannot pin UUIDs; the
+         *     registry generates them. Everything else mirrors :class:`RobotEntry`.
+         */
+        RobotCreateRequest: {
+            /** Cameras */
+            cameras?: string[];
+            /** Connection */
+            connection: components["schemas"]["SerialConnection"] | components["schemas"]["NetworkConnection"];
+            /** Image Ref */
+            image_ref?: string | null;
+            /** Name */
+            name: string;
+            /** Robot Type */
+            robot_type: string;
+            /** Teleop */
+            teleop?: string | null;
+        };
+        /**
+         * RobotEntry
+         * @description User-declared robot inventory item (persisted to registry.json).
+         *
+         *     ``robot_type`` is deliberately str (not Literal) so unknown types
+         *     round-trip cleanly. ``KnownRobotType`` is exported for the frontend
+         *     Add-Robot dropdown and for the adapter factory's dispatch table.
+         */
+        RobotEntry: {
+            /**
+             * Cameras
+             * @description Referenced CameraEntry.id values.
+             */
+            cameras?: string[];
+            /** Connection */
+            connection: components["schemas"]["SerialConnection"] | components["schemas"]["NetworkConnection"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id?: string;
+            /**
+             * Image Ref
+             * @description Static asset path for the UI card (e.g. /resources/so-101.png).
+             */
+            image_ref?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Robot Type
+             * @description lerobot Robot kind. See KnownRobotType for well-known values.
+             */
+            robot_type: string;
+            /**
+             * Teleop
+             * @description Optional bound TeleopEntry.id.
+             */
+            teleop?: string | null;
+        };
+        /** RobotStatus */
+        RobotStatus: {
+            /** Connected At */
+            connected_at?: string | null;
+            /** Last Error */
+            last_error?: string | null;
+            /**
+             * Online
+             * @default false
+             */
+            online: boolean;
+        };
+        /**
+         * SerialConnection
+         * @description USB-serial hardware link (e.g. SO-101 follower over Feetech).
+         */
+        SerialConnection: {
+            /**
+             * Baudrate
+             * @description Serial baud. None = adapter picks the motor-bus default.
+             */
+            baudrate?: number | null;
+            /**
+             * Kind
+             * @default serial
+             * @constant
+             */
+            kind: "serial";
+            /**
+             * Model Opts
+             * @description Opaque kwargs forwarded to the lerobot Robot constructor.
+             */
+            model_opts?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Port
+             * @description Stable device path (e.g. /dev/serial/by-id/usb-..., or COM7 on Windows). The frontend picks from the Task #4 device-discovery list.
+             */
+            port: string;
+        };
+        /** SerialDiscoveryResponse */
+        SerialDiscoveryResponse: {
+            /** Ports */
+            ports: components["schemas"]["SerialPortInfo"][];
+        };
+        /** SerialPortInfo */
+        SerialPortInfo: {
+            /** Description */
+            description?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
+            /**
+             * Pid
+             * @description USB product id as hex string.
+             */
+            pid?: string | null;
+            /**
+             * Port
+             * @description Stable device path if available, else raw device node.
+             */
+            port: string;
+            /** Product */
+            product?: string | null;
+            /**
+             * Raw Port
+             * @description Original pyserial device node (e.g. /dev/ttyACM0).
+             */
+            raw_port: string;
+            /** Serial Number */
+            serial_number?: string | null;
+            /**
+             * Vid
+             * @description USB vendor id as hex string (e.g. 0x0403).
+             */
+            vid?: string | null;
+        };
+        /** StatsResponse */
+        StatsResponse: {
+            /** Entries */
+            entries: {
+                [key: string]: unknown;
+            }[];
+            /** Session Id */
+            session_id: string;
+        };
+        /** TeleopCreateRequest */
+        TeleopCreateRequest: {
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "keyboard" | "mouse" | "gamepad" | "leader_arm" | "phone";
+            /** Name */
+            name: string;
+        };
+        /** TeleopEntry */
+        TeleopEntry: {
+            /**
+             * Config
+             * @description Free-form config (key bindings, dead zones, leader-arm port, ...).
+             */
+            config?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id?: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "keyboard" | "mouse" | "gamepad" | "leader_arm" | "phone";
+            /** Name */
+            name: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -63,6 +856,229 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_cameras_api_cameras_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraEntry"][];
+                };
+            };
+        };
+    };
+    create_camera_api_cameras_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CameraCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraEntry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_camera_api_cameras__camera_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraEntry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_camera_api_cameras__camera_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_camera_api_cameras__camera_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraEntry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_cameras_api_devices_cameras_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraDiscoveryResponse"];
+                };
+            };
+        };
+    };
+    probe_network_api_devices_network_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetworkProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkProbeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_serial_ports_api_devices_serial_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SerialDiscoveryResponse"];
+                };
+            };
+        };
+    };
     get_health_api_health_get: {
         parameters: {
             query?: never;
@@ -79,6 +1095,591 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    list_robots_api_robots_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotEntry"][];
+                };
+            };
+        };
+    };
+    create_robot_api_robots_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RobotCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotEntry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_robot_api_robots__robot_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotEntry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_robot_api_robots__robot_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_robot_api_robots__robot_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotEntry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connect_robot_api_robots__robot_id__connect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disconnect_robot_api_robots__robot_id__disconnect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_robot_status_api_robots__robot_id__status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RobotStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_offer_api_streams_offer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ice_api_streams__session_id__ice_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_keyframe_api_streams__session_id__keyframe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KeyframeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_quality_api_streams__session_id__quality_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QualityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QualityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_stats_api_streams__session_id__stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_stop_api_streams__session_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_teleops_api_teleops_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeleopEntry"][];
+                };
+            };
+        };
+    };
+    create_teleop_api_teleops_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeleopCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeleopEntry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_teleop_api_teleops__teleop_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teleop_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeleopEntry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_teleop_api_teleops__teleop_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teleop_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_teleop_api_teleops__teleop_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                teleop_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeleopEntry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

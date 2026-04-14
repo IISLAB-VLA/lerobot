@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from lerobot.dashboard.core.config import DashboardConfig
 
 if TYPE_CHECKING:
+    from lerobot.dashboard.services.assets import AssetManager
     from lerobot.dashboard.services.registry import Registry
     from lerobot.dashboard.services.robot_manager import RobotManagerProtocol
     from lerobot.dashboard.streaming import SignalingManager
@@ -27,5 +28,7 @@ class AppState:
     registry: Registry | None = None
     robot_manager: RobotManagerProtocol | None = None
     streaming: SignalingManager | None = None
+    assets: AssetManager | None = None
+    live_robots: dict[str, Any] = field(default_factory=dict)
     live_cameras: dict[str, Any] = field(default_factory=dict)
     live_teleops: dict[str, Any] = field(default_factory=dict)

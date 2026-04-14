@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from lerobot.dashboard.api.router import build_api_router
 from lerobot.dashboard.core.config import DashboardConfig
 from lerobot.dashboard.core.state import AppState
+from lerobot.dashboard.services.assets import RESOURCE_URL_PREFIX, AssetManager
 from lerobot.dashboard.services.registry import Registry, registry_path_for
 from lerobot.dashboard.services.robot_manager import InMemoryRobotManager
 from lerobot.dashboard.storage.paths import ensure_storage_dir
@@ -63,7 +64,8 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
     _configure_logging(resolved.log_level)
     ensure_storage_dir(resolved.storage_dir)
 
-    state = AppState(config=resolved)
+    assets = AssetManager(resolved.storage_dir)
+    state = AppState(config=resolved, assets=assets)
     state.registry = Registry(registry_path_for(resolved.storage_dir))
     state.robot_manager = InMemoryRobotManager()
     # Until the Task #6 camera adapter lands the streaming stack is fed by a
@@ -110,6 +112,12 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
 
     app.include_router(build_api_router())
     app.include_router(build_ws_router())
+
+    app.mount(
+        RESOURCE_URL_PREFIX,
+        StaticFiles(directory=str(assets.robots_dir)),
+        name="robot-images",
+    )
 
     if resolved.static_dir is not None and resolved.static_dir.is_dir():
         app.mount(
