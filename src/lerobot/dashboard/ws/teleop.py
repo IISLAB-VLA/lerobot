@@ -1,4 +1,4 @@
-"""WebSocket handler for ``/ws/robots/{robot_id}/teleop`` (task #11).
+"""WebSocket handler for ``/ws/robots/{robot_id}/teleop`` (task #11/#12).
 
 One WebSocket connection per operator. Only one operator may hold a
 given robot at a time; a second connect is immediately closed with code
@@ -22,6 +22,19 @@ Close codes:
   4001  conflict — another operator already connected
   4002  robot_offline — robot not connected in robot_manager
   1011  server error
+
+Input source wiring (task #12):
+  GamepadEventSource — created for every session; ``kind:"gamepad"`` WS
+    frames are routed to ``source.feed()`` which translates axes via
+    ``GamepadMapping`` and enqueues action vectors for the dispatcher.
+    By default the mapping is empty (no joints assigned); operator
+    config will populate it once ``TeleopEntry`` carries axis→joint tables.
+
+  LeaderArmEventSource — attached when the session factory provides one
+    via the ``leader_arm_factory`` parameter on
+    ``build_teleop_ws_router()``. A connect failure is logged and pushed
+    to the client as an ``error`` frame; the session continues so the
+    operator can still use gamepad / direct action frames.
 """
 
 from __future__ import annotations
@@ -29,17 +42,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import Any, Callable
 from uuid import UUID
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from lerobot.dashboard.core.state import AppState
+from lerobot.dashboard.teleop.adapters.gamepad import GamepadEventSource, LinearAxisMapping
+from lerobot.dashboard.teleop.adapters.leader_arm import LeaderArmEventSource, TeleoperatorPoller
 from lerobot.dashboard.teleop.deadman import HEARTBEAT_TIMEOUT_MS, DeadmanStateMachine
 from lerobot.dashboard.teleop.dispatcher import TeleopDispatcher
 from lerobot.dashboard.teleop.protocol import (
     ClientFrame,
     ClientFrameType,
+    GamepadEvent,
     ProtocolError,
     ServerFrame,
     ServerFrameType,
@@ -65,8 +81,27 @@ _DEFAULT_SPEC = ActionSpec(
 
 _TELEMETRY_HZ = 1.0
 
+# Type alias for the optional leader-arm factory injected by tests or the
+# app factory. Receives the robot UUID and returns a ready-to-start source
+# (or None if no leader arm is configured for this robot).
+LeaderArmFactory = Callable[[UUID], LeaderArmEventSource | None]
 
-def build_teleop_ws_router() -> APIRouter:
+
+def build_teleop_ws_router(
+    *,
+    leader_arm_factory: LeaderArmFactory | None = None,
+) -> APIRouter:
+    """Build and return the teleop WebSocket sub-router.
+
+    Parameters
+    ----------
+    leader_arm_factory:
+        Optional factory called with ``robot_id`` at session start. If it
+        returns a :class:`LeaderArmEventSource`, the session attaches it to
+        the dispatcher. Primarily used for testing with a
+        :class:`StubTeleoperator`; production code would wire the real
+        hardware factory here once teleoperator config is fully integrated.
+    """
     router = APIRouter()
 
     @router.websocket("/robots/{robot_id}/teleop")
@@ -122,6 +157,12 @@ def build_teleop_ws_router() -> APIRouter:
             teleop_id=rid,
         )
 
+        # GamepadEventSource: always created so gamepad WS frames are
+        # immediately available. The default mapping has no joint assignments
+        # (no actions produced) until the operator configures axis→joint
+        # mapping via TeleopEntry config.
+        gamepad_source = GamepadEventSource(mapping=LinearAxisMapping(axis_joints=()))
+
         async def _run_session() -> None:
             _closed = False
 
@@ -153,6 +194,16 @@ def build_teleop_ws_router() -> APIRouter:
                     ).to_json()
                 )
 
+            async def push_error(code: str, message: str) -> None:
+                await safe_send(
+                    ServerFrame(
+                        seq=seq_out.next(),
+                        ts_server_ms=_now_ms(),
+                        type=ServerFrameType.ERROR,
+                        payload={"code": code, "message": message},
+                    ).to_json()
+                )
+
             async def telemetry_loop() -> None:
                 interval = 1.0 / _TELEMETRY_HZ
                 while True:
@@ -179,6 +230,30 @@ def build_teleop_ws_router() -> APIRouter:
             telemetry_task = asyncio.create_task(telemetry_loop(), name="teleop_telemetry")
 
             try:
+                # Attach gamepad source — passive (just needs start() called so
+                # it accepts feed() calls from the WS frame handler).
+                await dispatcher.attach(gamepad_source)
+
+                # Optionally attach leader arm source.
+                if leader_arm_factory is not None:
+                    leader_src = leader_arm_factory(rid)
+                    if leader_src is not None:
+                        try:
+                            await dispatcher.attach(leader_src)
+                            logger.info("teleop: leader arm attached for robot %s", robot_id)
+                        except Exception as exc:
+                            logger.warning(
+                                "teleop: leader arm connect failed for robot %s: %s",
+                                robot_id,
+                                exc,
+                            )
+                            await push_error(
+                                "leader_arm_connect_failed",
+                                f"Leader arm failed to connect: {exc}",
+                            )
+                            # Session continues — operator can still use gamepad /
+                            # direct action frames.
+
                 # Push initial IDLE state.
                 await push_state("idle")
 
@@ -187,14 +262,7 @@ def build_teleop_ws_router() -> APIRouter:
                     try:
                         frame = ClientFrame.from_json(raw)
                     except ProtocolError as exc:
-                        await safe_send(
-                            ServerFrame(
-                                seq=seq_out.next(),
-                                ts_server_ms=_now_ms(),
-                                type=ServerFrameType.ERROR,
-                                payload={"code": "protocol_error", "message": str(exc)},
-                            ).to_json()
-                        )
+                        await push_error("protocol_error", str(exc))
                         continue
 
                     now_ms = _now_ms()
@@ -220,15 +288,16 @@ def build_teleop_ws_router() -> APIRouter:
                             try:
                                 event = parse_teleop_event(frame.payload)
                             except ProtocolError as exc:
-                                await safe_send(
-                                    ServerFrame(
-                                        seq=seq_out.next(),
-                                        ts_server_ms=_now_ms(),
-                                        type=ServerFrameType.ERROR,
-                                        payload={"code": "bad_input", "message": str(exc)},
-                                    ).to_json()
-                                )
+                                await push_error("bad_input", str(exc))
                                 continue
+                            # Gamepad events feed the action source directly so
+                            # axis values flow through the deadman gate and
+                            # validator on the same code path as direct action
+                            # frames (not the aux handle_event path).
+                            if isinstance(event, GamepadEvent):
+                                await gamepad_source.feed(event)
+                            # Always forward to aux channel for raw event logging,
+                            # macro triggering, or any future teleop_manager use.
                             await dispatcher.handle_event(event)
                             await push_ack(frame.seq)
 

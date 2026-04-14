@@ -26,7 +26,9 @@ from lerobot.dashboard.services.registry_models import RobotEntry, RobotStatus, 
 from lerobot.dashboard.services.robot_manager import InMemoryRobotManager
 from lerobot.dashboard.services.teleop_manager import InMemoryTeleopManager
 from lerobot.dashboard.storage.paths import ensure_storage_dir
+from lerobot.dashboard.teleop.adapters.leader_arm import LeaderArmEventSource
 from lerobot.dashboard.ws.router import build_ws_router
+from lerobot.dashboard.ws.teleop import build_teleop_ws_router
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +52,7 @@ class _OnlineRobotManager(InMemoryRobotManager):
 # ---------------------------------------------------------------------------
 
 
-def _make_app(robot_id: UUID, tmp_path) -> FastAPI:
+def _make_app(robot_id: UUID, tmp_path, *, leader_arm_factory=None) -> FastAPI:
     config = DashboardConfig()
     ensure_storage_dir(config.storage_dir)
     assets = AssetManager(config.storage_dir)
@@ -62,7 +64,14 @@ def _make_app(robot_id: UUID, tmp_path) -> FastAPI:
 
     app = FastAPI()
     app.state.dashboard = state
-    app.include_router(build_ws_router())
+    # Use the teleop router directly so leader_arm_factory can be injected.
+    if leader_arm_factory is not None:
+        from fastapi import APIRouter
+        ws_router = APIRouter(prefix="/ws")
+        ws_router.include_router(build_teleop_ws_router(leader_arm_factory=leader_arm_factory))
+        app.include_router(ws_router)
+    else:
+        app.include_router(build_ws_router())
     return app
 
 
@@ -208,3 +217,92 @@ def test_teleop_ws_input_frame_keyboard_returns_ack(tmp_path):
         frame = _recv(ws)
         assert frame["type"] == "ack"
         assert frame["payload"]["seq"] == 5
+
+
+# ---------------------------------------------------------------------------
+# Task #12: GamepadEventSource and LeaderArmEventSource wiring
+# ---------------------------------------------------------------------------
+
+
+def test_teleop_ws_gamepad_input_returns_ack(tmp_path):
+    """Gamepad input frames are acked (and routed to gamepad source + aux)."""
+    rid = uuid4()
+    app = _make_app(rid, tmp_path)
+    with TestClient(app).websocket_connect(f"/ws/robots/{rid}/teleop") as ws:
+        _recv(ws)  # initial state
+        _send(
+            ws,
+            seq=7,
+            ts_client_ms=0,
+            type="input",
+            payload={"kind": "gamepad", "axes": [0.5, -0.3], "buttons": []},
+        )
+        frame = _recv(ws)
+        assert frame["type"] == "ack"
+        assert frame["payload"]["seq"] == 7
+
+
+def test_teleop_ws_leader_arm_attached_on_factory(tmp_path):
+    """A leader arm factory returning a source is attached and its events flow."""
+    rid = uuid4()
+
+    class _StubTeleop:
+        """Minimal TeleoperatorPoller that satisfies the protocol."""
+
+        def __init__(self) -> None:
+            self.connected = False
+
+        def connect(self) -> None:
+            self.connected = True
+
+        def disconnect(self) -> None:
+            pass
+
+        def get_action(self) -> dict:
+            return {"j1": 0.1}
+
+    stub = _StubTeleop()
+
+    def factory(robot_id: UUID) -> LeaderArmEventSource:
+        return LeaderArmEventSource(stub, rate_hz=50.0)
+
+    app = _make_app(rid, tmp_path, leader_arm_factory=factory)
+    with TestClient(app).websocket_connect(f"/ws/robots/{rid}/teleop") as ws:
+        frame = _recv(ws)
+        assert frame["type"] == "state"
+        assert frame["payload"]["state"] == "idle"
+        # Session started successfully with leader arm attached.
+        assert stub.connected is True
+
+
+def test_teleop_ws_leader_arm_connect_failure_sends_error(tmp_path):
+    """A leader arm that fails to connect sends an error frame but keeps session alive."""
+    rid = uuid4()
+
+    class _FailingTeleop:
+        def connect(self) -> None:
+            raise RuntimeError("motor bus not found")
+
+        def disconnect(self) -> None:
+            pass
+
+        def get_action(self) -> dict:
+            return {}
+
+    def factory(robot_id: UUID) -> LeaderArmEventSource:
+        return LeaderArmEventSource(_FailingTeleop(), rate_hz=50.0)
+
+    app = _make_app(rid, tmp_path, leader_arm_factory=factory)
+    with TestClient(app).websocket_connect(f"/ws/robots/{rid}/teleop") as ws:
+        # First frame may be error (leader arm fail) or state; collect both.
+        frames: list[dict] = []
+        for _ in range(3):
+            try:
+                frames.append(_recv(ws))
+            except Exception:
+                break
+
+        frame_types = {f["type"] for f in frames}
+        assert "error" in frame_types, f"Expected error frame, got: {frames}"
+        # Session must stay alive: state frame must also appear.
+        assert "state" in frame_types, f"Expected state frame, got: {frames}"
