@@ -229,6 +229,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/inference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Inference Sessions */
+        get: operations["list_inference_sessions_api_inference_get"];
+        put?: never;
+        /** Start Inference */
+        post: operations["start_inference_api_inference_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inference/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Inference Session */
+        get: operations["get_inference_session_api_inference__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inference/{session_id}/command": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Inference Command */
+        post: operations["set_inference_command_api_inference__session_id__command_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inference/{session_id}/deadman": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Inference Deadman */
+        post: operations["set_inference_deadman_api_inference__session_id__deadman_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inference/{session_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop Inference */
+        post: operations["stop_inference_api_inference__session_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Policies */
+        get: operations["list_policies_api_policies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/policies/{repo_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Policy */
+        get: operations["get_policy_api_policies__repo_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/recordings": {
         parameters: {
             query?: never;
@@ -947,6 +1067,16 @@ export interface components {
              */
             cancelled: true;
         };
+        /** CommandRequest */
+        CommandRequest: {
+            /** Text */
+            text: string;
+        };
+        /** DeadmanRequest */
+        DeadmanRequest: {
+            /** Held */
+            held: boolean;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -995,6 +1125,68 @@ export interface components {
             sdpMLineIndex?: number | null;
             /** Sdpmid */
             sdpMid?: string | null;
+        };
+        /**
+         * InferenceSession
+         * @description Public view of an inference session for HTTP responses.
+         */
+        InferenceSession: {
+            /**
+             * Deadman Held
+             * @default false
+             */
+            deadman_held: boolean;
+            /**
+             * Deadman Required
+             * @default false
+             */
+            deadman_required: boolean;
+            /** Dry Run */
+            dry_run: boolean;
+            /** Error */
+            error?: string | null;
+            /** Fps */
+            fps: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Latency Ms */
+            last_latency_ms?: number | null;
+            /** Max Action Magnitude */
+            max_action_magnitude?: number | null;
+            /** Repo Id */
+            repo_id: string;
+            /**
+             * Robot Id
+             * Format: uuid
+             */
+            robot_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "starting" | "running" | "stopping" | "stopped" | "failed";
+            /**
+             * Step
+             * @default 0
+             */
+            step: number;
+            /** Stopped At */
+            stopped_at?: string | null;
+            /**
+             * Suppressed Steps
+             * @default 0
+             */
+            suppressed_steps: number;
+            /** Task Description */
+            task_description: string;
         };
         /** KeyframeResponse */
         KeyframeResponse: {
@@ -1114,6 +1306,35 @@ export interface components {
             session_id: string;
             /** Type */
             type: string;
+        };
+        /**
+         * PolicyDescriptor
+         * @description Summary of a locally cached policy checkpoint.
+         */
+        PolicyDescriptor: {
+            /** Action Features */
+            action_features?: {
+                [key: string]: unknown;
+            } | null;
+            /** Last Modified */
+            last_modified?: string | null;
+            /** Num Parameters */
+            num_parameters?: number | null;
+            /** Observation Features */
+            observation_features?: {
+                [key: string]: unknown;
+            } | null;
+            /** Policy Type */
+            policy_type: string;
+            /** Repo Id */
+            repo_id: string;
+            /** Root */
+            root: string;
+            /**
+             * Supports Language
+             * @default false
+             */
+            supports_language: boolean;
         };
         /** QualityRequest */
         QualityRequest: {
@@ -1335,28 +1556,6 @@ export interface components {
             vid?: string | null;
         };
         /**
-         * StartRequest
-         * @description Payload accepted by :meth:`RecorderService.start`.
-         */
-        StartRequest: {
-            /** Dataset Name */
-            dataset_name: string;
-            /** Fps */
-            fps: number;
-            /**
-             * Robot Id
-             * Format: uuid
-             */
-            robot_id: string;
-            /** Task Description */
-            task_description: string;
-            /**
-             * Use Videos
-             * @default true
-             */
-            use_videos: boolean;
-        };
-        /**
          * StatsManyResponse
          * @description Batch response for the multi-session stats overlay.
          *
@@ -1377,15 +1576,6 @@ export interface components {
             }[];
             /** Session Id */
             session_id: string;
-        };
-        /** StopRequest */
-        StopRequest: {
-            /**
-             * Save
-             * @description Finalize the dataset (True) or discard buffered frames (False).
-             * @default true
-             */
-            save: boolean;
         };
         /** TeleopCreateRequest */
         TeleopCreateRequest: {
@@ -1435,6 +1625,87 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** StopRequest */
+        lerobot__dashboard__api__inference__StopRequest: {
+            /**
+             * Reason
+             * @default client
+             */
+            reason: string;
+        };
+        /** StopRequest */
+        lerobot__dashboard__api__recordings__StopRequest: {
+            /**
+             * Save
+             * @description Finalize the dataset (True) or discard buffered frames (False).
+             * @default true
+             */
+            save: boolean;
+        };
+        /**
+         * StartRequest
+         * @description Payload accepted by :meth:`InferenceService.start`.
+         *
+         *     ``max_action_magnitude`` and ``deadman_required`` are per-session
+         *     safety knobs layered on top of adapter-level clamps (e.g. UR's
+         *     ``max_relative_target``). The adapter limits stay in place as the
+         *     hardware-protection floor; these knobs are the operator's "policy
+         *     operating envelope" that can be tightened per run.
+         */
+        lerobot__dashboard__services__inference__StartRequest: {
+            /**
+             * Deadman Required
+             * @description When True the loop skips ``send_action`` unless the operator is actively holding the deadman (see ``set_deadman``). Dry-run sessions ignore this field.
+             * @default false
+             */
+            deadman_required: boolean;
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
+            /** Fps */
+            fps: number;
+            /**
+             * Max Action Magnitude
+             * @description Absolute cap applied to each element of the policy's action vector before ``send_action``. ``None`` means no session-level cap (adapter safety clamps still apply).
+             */
+            max_action_magnitude?: number | null;
+            /** Repo Id */
+            repo_id: string;
+            /**
+             * Robot Id
+             * Format: uuid
+             */
+            robot_id: string;
+            /**
+             * Task Description
+             * @default
+             */
+            task_description: string;
+        };
+        /**
+         * StartRequest
+         * @description Payload accepted by :meth:`RecorderService.start`.
+         */
+        lerobot__dashboard__services__recorder__StartRequest: {
+            /** Dataset Name */
+            dataset_name: string;
+            /** Fps */
+            fps: number;
+            /**
+             * Robot Id
+             * Format: uuid
+             */
+            robot_id: string;
+            /** Task Description */
+            task_description: string;
+            /**
+             * Use Videos
+             * @default true
+             */
+            use_videos: boolean;
         };
     };
     responses: never;
@@ -1916,6 +2187,257 @@ export interface operations {
             };
         };
     };
+    list_inference_sessions_api_inference_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceSession"][];
+                };
+            };
+        };
+    };
+    start_inference_api_inference_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["lerobot__dashboard__services__inference__StartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceSession"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_inference_session_api_inference__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceSession"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_inference_command_api_inference__session_id__command_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceSession"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_inference_deadman_api_inference__session_id__deadman_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeadmanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceSession"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_inference_api_inference__session_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["lerobot__dashboard__api__inference__StopRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceSession"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_policies_api_policies_get: {
+        parameters: {
+            query?: {
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PolicyDescriptor"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_policy_api_policies__repo_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PolicyDescriptor"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_recordings_api_recordings_get: {
         parameters: {
             query?: never;
@@ -1945,7 +2467,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["StartRequest"];
+                "application/json": components["schemas"]["lerobot__dashboard__services__recorder__StartRequest"];
             };
         };
         responses: {
@@ -2011,7 +2533,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["StopRequest"];
+                "application/json": components["schemas"]["lerobot__dashboard__api__recordings__StopRequest"];
             };
         };
         responses: {

@@ -16,6 +16,7 @@ import {
   InferenceConflictError,
   listPolicies,
   setInferenceCommand,
+  setInferenceDeadman,
   startInference,
   stopInference,
   type InferenceSession,
@@ -46,9 +47,12 @@ export function RobotInferencePage(): JSX.Element {
   const [fps, setFps] = useState<number>(30);
   const [taskDescription, setTaskDescription] = useState("");
   const [dryRun, setDryRun] = useState(true);
+  const [deadmanRequired, setDeadmanRequired] = useState(true);
+  const [maxActionMagnitudeText, setMaxActionMagnitudeText] = useState("");
   const [activeSession, setActiveSession] = useState<InferenceSession | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [commandDraft, setCommandDraft] = useState("");
+  const [deadmanHeld, setDeadmanHeld] = useState(false);
 
   const selectedPolicy = useMemo(
     () => policies.find((p) => p.repo_id === repoId) ?? null,
@@ -88,6 +92,13 @@ export function RobotInferencePage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subscription.terminal, subscription.errorMessage]);
 
+  const parsedMaxAction = useMemo<number | null>(() => {
+    const trimmed = maxActionMagnitudeText.trim();
+    if (!trimmed) return null;
+    const n = Number.parseFloat(trimmed);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [maxActionMagnitudeText]);
+
   const startMutation = useMutation({
     mutationFn: () =>
       startInference({
@@ -96,10 +107,13 @@ export function RobotInferencePage(): JSX.Element {
         fps,
         task_description: taskDescription,
         dry_run: dryRun,
+        deadman_required: deadmanRequired,
+        max_action_magnitude: parsedMaxAction,
       }),
     onSuccess: (session) => {
       setActiveSession(session);
       setSubmitError(null);
+      setDeadmanHeld(false);
       void queryClient.invalidateQueries({ queryKey: ["inference"] });
     },
     onError: (err: unknown) => {
@@ -129,6 +143,54 @@ export function RobotInferencePage(): JSX.Element {
       return setInferenceCommand(activeSession.id, { text: commandDraft });
     },
   });
+
+  const deadmanMutation = useMutation({
+    mutationFn: (held: boolean) => {
+      if (!activeSession) throw new Error("no active session");
+      return setInferenceDeadman(activeSession.id, { held });
+    },
+    onSuccess: (session, held) => {
+      setActiveSession(session);
+      setDeadmanHeld(held);
+    },
+  });
+
+  const deadmanActive = Boolean(
+    activeSession &&
+      activeSession.deadman_required &&
+      !activeSession.dry_run &&
+      (activeSession.status === "running" || activeSession.status === "starting"),
+  );
+
+  useEffect(() => {
+    if (!deadmanActive) return undefined;
+    const isEditable = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      if (target.isContentEditable) return true;
+      const tag = target.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || event.repeat) return;
+      if (isEditable(event.target)) return;
+      event.preventDefault();
+      if (!deadmanHeld) deadmanMutation.mutate(true);
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== "Space") return;
+      if (isEditable(event.target)) return;
+      event.preventDefault();
+      if (deadmanHeld) deadmanMutation.mutate(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      // Release if we navigate away or the session ends mid-hold so the loop pauses cleanly.
+      if (deadmanHeld) deadmanMutation.mutate(false);
+    };
+  }, [deadmanActive, deadmanHeld, deadmanMutation]);
 
   if (robotsQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading robot…</p>;
@@ -193,6 +255,10 @@ export function RobotInferencePage(): JSX.Element {
           setTaskDescription={setTaskDescription}
           dryRun={dryRun}
           setDryRun={setDryRun}
+          deadmanRequired={deadmanRequired}
+          setDeadmanRequired={setDeadmanRequired}
+          maxActionMagnitudeText={maxActionMagnitudeText}
+          setMaxActionMagnitudeText={setMaxActionMagnitudeText}
           startMutation={startMutation}
           stopMutation={stopMutation}
           activeSession={activeSession}
@@ -207,6 +273,9 @@ export function RobotInferencePage(): JSX.Element {
           commandDraft={commandDraft}
           setCommandDraft={setCommandDraft}
           commandMutation={commandMutation}
+          deadmanHeld={deadmanHeld}
+          deadmanActive={deadmanActive}
+          deadmanPending={deadmanMutation.isPending}
           supportsLanguage={selectedPolicy?.supports_language ?? false}
           running={Boolean(running)}
         />
@@ -230,6 +299,10 @@ interface ConfigPanelProps {
   setTaskDescription: (v: string) => void;
   dryRun: boolean;
   setDryRun: (v: boolean) => void;
+  deadmanRequired: boolean;
+  setDeadmanRequired: (v: boolean) => void;
+  maxActionMagnitudeText: string;
+  setMaxActionMagnitudeText: (v: string) => void;
   startMutation: UseMutationResult<InferenceSession, unknown, void, unknown>;
   stopMutation: UseMutationResult<InferenceSession, unknown, void, unknown>;
   activeSession: InferenceSession | null;
@@ -248,6 +321,10 @@ function ConfigPanel({
   setTaskDescription,
   dryRun,
   setDryRun,
+  deadmanRequired,
+  setDeadmanRequired,
+  maxActionMagnitudeText,
+  setMaxActionMagnitudeText,
   startMutation,
   stopMutation,
   activeSession,
@@ -315,6 +392,39 @@ function ConfigPanel({
           className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         />
       </div>
+
+      <fieldset className="grid gap-3 rounded-md border border-input p-3" disabled={running}>
+        <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Safety
+        </legend>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={deadmanRequired}
+            onChange={(e) => setDeadmanRequired(e.target.checked)}
+            className="h-4 w-4"
+          />
+          <span>
+            Require deadman
+            <span className="ml-1 text-xs text-muted-foreground">
+              (hold <kbd className="rounded border px-1 text-[10px]">SPACE</kbd> to send actions)
+            </span>
+          </span>
+        </label>
+        <div className="grid gap-1.5">
+          <Label htmlFor="max-action">Max action magnitude</Label>
+          <Input
+            id="max-action"
+            inputMode="decimal"
+            value={maxActionMagnitudeText}
+            onChange={(e) => setMaxActionMagnitudeText(e.target.value)}
+            placeholder="leave empty for no session-level cap"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Each element of the policy action vector is clamped to ±value before send_action. Adapter-level safety still applies on top.
+          </p>
+        </div>
+      </fieldset>
 
       {submitError ? (
         <p role="alert" className="text-sm text-destructive">
@@ -384,6 +494,9 @@ interface SessionPanelProps {
   commandDraft: string;
   setCommandDraft: (v: string) => void;
   commandMutation: UseMutationResult<void, unknown, void, unknown>;
+  deadmanHeld: boolean;
+  deadmanActive: boolean;
+  deadmanPending: boolean;
   supportsLanguage: boolean;
   running: boolean;
 }
@@ -395,6 +508,9 @@ function SessionPanel({
   commandDraft,
   setCommandDraft,
   commandMutation,
+  deadmanHeld,
+  deadmanActive,
+  deadmanPending,
   supportsLanguage,
   running,
 }: SessionPanelProps): JSX.Element {
@@ -432,21 +548,43 @@ function SessionPanel({
             {activeSession.repo_id} · {activeSession.fps} fps · session {activeSession.id.slice(0, 8)}
           </p>
         </div>
-        <span
-          className={`text-[11px] font-medium ${
-            phase === "live"
-              ? "text-emerald-600 dark:text-emerald-400"
-              : phase === "error"
-                ? "text-destructive"
-                : "text-muted-foreground"
-          }`}
-          data-testid="inference-phase"
-        >
-          {phase}
-          {phase === "connecting" && subscription.reconnectAttempt > 0
-            ? ` · attempt ${subscription.reconnectAttempt}`
-            : ""}
-        </span>
+        <div className="flex items-center gap-2">
+          {deadmanActive ? (
+            <span
+              data-testid="inference-deadman"
+              className={`inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[11px] font-medium ${
+                deadmanHeld
+                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                  : "bg-destructive/15 text-destructive"
+              }`}
+              title={deadmanHeld ? "Deadman held — actions sending" : "Hold SPACE to send actions"}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  deadmanHeld ? "animate-pulse bg-emerald-500" : "bg-destructive"
+                }`}
+                aria-hidden
+              />
+              {deadmanHeld ? "deadman: held" : "deadman: release"}
+              {deadmanPending ? " …" : ""}
+            </span>
+          ) : null}
+          <span
+            className={`text-[11px] font-medium ${
+              phase === "live"
+                ? "text-emerald-600 dark:text-emerald-400"
+                : phase === "error"
+                  ? "text-destructive"
+                  : "text-muted-foreground"
+            }`}
+            data-testid="inference-phase"
+          >
+            {phase}
+            {phase === "connecting" && subscription.reconnectAttempt > 0
+              ? ` · attempt ${subscription.reconnectAttempt}`
+              : ""}
+          </span>
+        </div>
       </header>
 
       <dl className="grid grid-cols-3 gap-2 text-[11px] font-mono">
