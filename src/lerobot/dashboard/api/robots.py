@@ -193,3 +193,50 @@ async def get_robot_status(
     except RegistryError as exc:
         raise map_registry_error(exc) from exc
     return await manager.get_status(robot_id)
+
+
+class RawEncoderTicksResponse(BaseModel):
+    """Raw Feetech encoder tick values for a connected robot.
+
+    Used by the calibration wizard and hardware smoke tests to verify that
+    motors are responding before calibration data is available.  ``ticks``
+    is empty when the robot is offline or has no Feetech bus.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    robot_id: UUID
+    ticks: dict[str, int] = Field(
+        default_factory=dict,
+        description="Mapping of motor name → raw encoder tick (0–4095 for Feetech motors).",
+    )
+    timestamp_ms: int = Field(
+        description="Unix timestamp in milliseconds when the read was taken.",
+    )
+
+
+@router.get("/{robot_id}/raw_encoder_ticks", response_model=RawEncoderTicksResponse)
+async def get_raw_encoder_ticks(
+    robot_id: UUID,
+    registry: Registry = Depends(get_registry),
+    manager: RobotManagerProtocol = Depends(get_robot_manager),
+) -> RawEncoderTicksResponse:
+    """Return raw Feetech encoder tick values without calibration.
+
+    Calls :meth:`RobotManagerProtocol.read_raw_encoder_ticks` which bypasses
+    normalization.  Returns ``ticks: {}`` (not an error) when the robot is
+    offline, disconnected, or uses a non-Feetech bus — check
+    ``GET /robots/{id}/status`` to distinguish the two cases.
+    """
+    import time
+
+    try:
+        await registry.get_robot(robot_id)
+    except RegistryError as exc:
+        raise map_registry_error(exc) from exc
+    ticks = await manager.read_raw_encoder_ticks(robot_id)
+    return RawEncoderTicksResponse(
+        robot_id=robot_id,
+        ticks=ticks,
+        timestamp_ms=int(time.time() * 1000),
+    )

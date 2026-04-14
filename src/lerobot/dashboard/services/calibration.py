@@ -29,6 +29,7 @@ import asyncio
 import logging
 import secrets
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -396,10 +397,8 @@ class CalibrationController:
             async with self._lock:
                 session = self._sessions.get(robot_id)
                 if session is not None:
-                    try:
+                    with suppress(ValueError):
                         session.subscribers.remove(queue)
-                    except ValueError:
-                        pass
 
     # ----- internals (must hold self._lock) ------------------------------
 
@@ -452,12 +451,20 @@ class CalibrationController:
         self._latest[session.robot_id] = summary
 
     async def _feedback_loop(self, session: _Session) -> None:
-        """Pull ``robot_manager.read_observation`` at :data:`JOINT_FEEDBACK_HZ`.
+        """Pull joint positions and raw encoder ticks at :data:`JOINT_FEEDBACK_HZ`.
 
-        Only numeric scalar values are forwarded; camera frames and other
-        non-numeric observation keys are dropped so the WS payload stays
-        small. Exits when the session terminates; swallows read errors
-        because they shouldn't take down the calibration wizard.
+        Runs two reads per tick:
+
+        * :meth:`read_observation` — normalised joint values (may be empty /
+          stale before calibration is complete); forwarded as ``values``.
+        * :meth:`read_raw_encoder_ticks` — raw Feetech encoder integers
+          (no calibration table applied); forwarded as ``raw_ticks``.  Always
+          ``{}`` for non-Feetech robots and when offline.
+
+        Only numeric scalar values are forwarded from ``read_observation``;
+        camera frames and other non-numeric keys are dropped so the WS
+        payload stays small.  Exits when the session terminates; swallows
+        read errors because they shouldn't take down the calibration wizard.
         """
         interval = 1.0 / JOINT_FEEDBACK_HZ
         try:
@@ -473,8 +480,17 @@ class CalibrationController:
                         exc_info=True,
                     )
                     obs = {}
+                try:
+                    raw_ticks = await session.robot_manager.read_raw_encoder_ticks(session.robot_id)
+                except Exception:  # noqa: BLE001
+                    logger.debug(
+                        "calibration %s raw_encoder_ticks read failed",
+                        session.session_id,
+                        exc_info=True,
+                    )
+                    raw_ticks = {}
                 values = {k: float(v) for k, v in obs.items() if isinstance(v, (int, float))}
-                if values:
+                if values or raw_ticks:
                     async with self._lock:
                         if session.terminated:
                             return
@@ -483,6 +499,7 @@ class CalibrationController:
                             "session_id": session.session_id,
                             "step_id": session.current_step.step_id,
                             "values": values,
+                            "raw_ticks": raw_ticks,
                             "timestamp_ms": int(datetime.now(UTC).timestamp() * 1000),
                         }
                         for queue in list(session.subscribers):
@@ -494,14 +511,10 @@ class CalibrationController:
 
 def _enqueue_drop_oldest(queue: asyncio.Queue[Any], item: Any) -> None:
     if queue.full():
-        try:
+        with suppress(asyncio.QueueEmpty):
             queue.get_nowait()
-        except asyncio.QueueEmpty:
-            pass
-    try:
+    with suppress(asyncio.QueueFull):  # pragma: no cover
         queue.put_nowait(item)
-    except asyncio.QueueFull:  # pragma: no cover
-        pass
 
 
 __all__ = [

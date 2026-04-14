@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -36,10 +37,8 @@ from lerobot.dashboard.services.calibration import (  # noqa: E402
 )
 from lerobot.dashboard.services.registry_models import (  # noqa: E402
     RobotEntry,
-    SerialConnection,
 )
 from lerobot.dashboard.services.robot_manager import RobotStatus  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -55,6 +54,9 @@ class _FakeRobotManager:
 
     async def read_observation(self, robot_id: UUID) -> dict[str, Any]:
         return {"joint_1.pos": 0.11, "joint_2.pos": -0.22}
+
+    async def read_raw_encoder_ticks(self, robot_id: UUID) -> dict[str, int]:
+        return {"joint_1": 2048, "joint_2": 1024}
 
     # The other RobotManagerProtocol methods aren't exercised by the
     # controller so we leave them as no-ops.
@@ -146,11 +148,7 @@ async def test_ack_advances_through_full_plan() -> None:
             # Wait until the server publishes the step and is awaiting input.
             for _ in range(50):
                 snapshot = await controller.get_status(robot_id)
-                if (
-                    snapshot is not None
-                    and snapshot.step_id == step.step_id
-                    and snapshot.awaiting_user_input
-                ):
+                if snapshot is not None and snapshot.step_id == step.step_id and snapshot.awaiting_user_input:
                     break
                 await asyncio.sleep(0.01)
             else:  # pragma: no cover - progress timeout
@@ -160,10 +158,8 @@ async def test_ack_advances_through_full_plan() -> None:
     finally:
         if not consumer.done():
             consumer.cancel()
-            try:
+            with suppress(asyncio.CancelledError, Exception):
                 await consumer
-            except (asyncio.CancelledError, Exception):
-                pass
 
     types = [e["type"] for e in collected]
     assert types[0] == "step"
@@ -213,6 +209,8 @@ async def test_joint_feedback_is_published_while_session_runs() -> None:
     assert isinstance(feedback["timestamp_ms"], int) and feedback["timestamp_ms"] > 0
     assert feedback["values"]["joint_1.pos"] == pytest.approx(0.11)
     assert "joint_2.pos" in feedback["values"]
+    # raw_ticks must be present (populated from read_raw_encoder_ticks)
+    assert feedback["raw_ticks"] == {"joint_1": 2048, "joint_2": 1024}
 
     await controller.cancel(robot_id, start.session_id)
 
@@ -360,9 +358,7 @@ def test_rest_ack_conflict_for_bad_step(client: TestClient) -> None:
 
 def test_ws_rejects_unknown_session(client: TestClient) -> None:
     robot_id = uuid4()
-    with client.websocket_connect(
-        f"/ws/robots/{robot_id}/calibrate?session_id=cal-nope"
-    ) as ws:
+    with client.websocket_connect(f"/ws/robots/{robot_id}/calibrate?session_id=cal-nope") as ws:
         msg = ws.receive_json()
         assert msg["type"] == "error"
 
@@ -377,9 +373,7 @@ def test_ws_replays_current_step_on_connect(client: TestClient) -> None:
     for _ in range(30):
         if client.get(f"/api/robots/{robot_id}/calibrate/status").json().get("awaiting_user_input"):
             break
-    with client.websocket_connect(
-        f"/ws/robots/{robot_id}/calibrate?session_id={session_id}"
-    ) as ws:
+    with client.websocket_connect(f"/ws/robots/{robot_id}/calibrate?session_id={session_id}") as ws:
         event = ws.receive_json()
         assert event["type"] == "step"
         assert event["step_id"] == "home_pose"

@@ -185,7 +185,9 @@ class LerobotRobotManager:
     # ----- lifecycle ------------------------------------------------------
 
     async def connect(
-        self, entry: RobotEntry, cameras: list[CameraEntry]  # noqa: ARG002 — see docstring
+        self,
+        entry: RobotEntry,
+        cameras: list[CameraEntry],  # noqa: ARG002 — see docstring
     ) -> RobotStatus:
         """Instantiate and connect the underlying lerobot robot.
 
@@ -307,6 +309,30 @@ class LerobotRobotManager:
                 )
             return {}
         return dict(obs)
+
+    async def read_raw_encoder_ticks(self, robot_id: UUID) -> dict[str, int]:
+        """Read raw encoder ticks from the robot's Feetech motor bus.
+
+        Calls ``bus.sync_read("Present_Position", normalize=False)`` to bypass
+        the calibration table.  Non-Feetech robots (e.g. UR) return ``{}``
+        because they don't expose a ``.bus`` attribute.  Any read failure
+        returns ``{}`` and logs a debug message rather than marking the robot
+        offline — raw-read failures are softer than ``get_observation`` failures.
+        """
+        async with self._lock:
+            slot = self._slots.get(robot_id)
+            if slot is None or not slot.status.online or slot.robot is None:
+                return {}
+            robot = slot.robot
+        bus = getattr(robot, "bus", None)
+        if bus is None:
+            return {}
+        try:
+            raw: dict[str, int] = await asyncio.to_thread(bus.sync_read, "Present_Position", normalize=False)
+            return {motor: int(tick) for motor, tick in raw.items()}
+        except Exception:  # noqa: BLE001
+            logger.debug("robot %s raw encoder read failed", robot_id, exc_info=True)
+            return {}
 
     async def get_features(self, robot_id: UUID) -> dict[str, dict]:
         async with self._lock:
