@@ -3,12 +3,15 @@
 The dashboard uses these long-lived channels:
 
 * ``/ws/events`` — server-to-client push (device status, recording progress,
-  backend logs). Implemented here as a minimal echo/heartbeat loop;
-  richer event fan-out is added incrementally.
-* ``/ws/teleop`` — bi-directional teleop command stream. Implemented in
-  task #11 by streaming-engineer; this module only reserves the route.
+  backend logs). Implemented here as a minimal heartbeat loop; richer event
+  fan-out is added incrementally.
+* ``/ws/robots/{robot_id}/teleop`` — bi-directional teleop command stream
+  (task #11 / #12). Implemented in :mod:`lerobot.dashboard.ws.teleop`.
+* ``/ws/robots/{robot_id}/calibrate`` — calibration event stream.
 * ``/ws/recordings/{session_id}`` — server-to-client push of recording
   progress events (task #13). Wraps :meth:`RecorderService.subscribe`.
+* ``/ws/benchmarks/{run_id}`` — benchmark run event stream (task #16).
+* ``/ws/inference/{session_id}`` — inference step event stream (task #14).
 """
 
 from __future__ import annotations
@@ -69,13 +72,6 @@ def build_ws_router() -> APIRouter:
                 await asyncio.sleep(15)
         except WebSocketDisconnect:
             logger.debug("events ws disconnected")
-
-    @router.websocket("/teleop")
-    async def teleop(websocket: WebSocket) -> None:
-        # Placeholder: streaming-engineer (task #11) implements the real protocol.
-        await websocket.accept()
-        await websocket.send_json({"type": "not_implemented", "task": 11})
-        await websocket.close(code=1011)
 
     @router.websocket("/robots/{robot_id}/calibrate")
     async def calibrate(websocket: WebSocket, robot_id: UUID, session_id: str) -> None:
