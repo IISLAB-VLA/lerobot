@@ -51,6 +51,8 @@ export interface ParsedStreamStats {
   jitterMs: number | null;
   framesDecoded: number | null;
   framesDropped: number | null;
+  frameWidth: number | null;
+  frameHeight: number | null;
 }
 
 interface InboundRtpEntry {
@@ -59,6 +61,8 @@ interface InboundRtpEntry {
   framesPerSecond?: number;
   framesDecoded?: number;
   framesDropped?: number;
+  frameWidth?: number;
+  frameHeight?: number;
   jitter?: number;
   timestamp?: number;
 }
@@ -113,6 +117,10 @@ export function parseStreamStats(
       typeof inbound?.framesDecoded === "number" ? inbound.framesDecoded : null,
     framesDropped:
       typeof inbound?.framesDropped === "number" ? inbound.framesDropped : null,
+    frameWidth:
+      typeof inbound?.frameWidth === "number" ? inbound.frameWidth : null,
+    frameHeight:
+      typeof inbound?.frameHeight === "number" ? inbound.frameHeight : null,
   };
 }
 
