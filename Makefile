@@ -55,12 +55,15 @@ dashboard-e2e: dashboard-frontend
 dashboard-e2e-nobuild:
 	cd tests/dashboard/e2e && npm test
 
-# Manual hardware smoke: runs only @hardware-tagged specs against real USB
-# serial + video devices (fake-devices disabled). Requires the robot + cameras
-# to be physically attached; see tests/dashboard/e2e/README.md for setup.
+# Manual hardware smoke: runs pytest hardware markers (RobotEnvRunner SO-101
+# connect, etc.) AND @hardware-tagged Playwright specs against real USB serial
+# + video devices (fake-devices disabled). Requires the robot + cameras to be
+# physically attached; see tests/dashboard/e2e/README.md for setup.
 # Not wired into CI — operator opts in explicitly.
+# Pytest runs first (faster + lower-level); Playwright second (browser UX).
 dashboard-e2e-hardware: dashboard-frontend
 	@git checkout HEAD -- src/lerobot/dashboard/static/.gitignore src/lerobot/dashboard/static/.gitkeep 2>/dev/null || true
+	uv run pytest tests/dashboard/e2e/hardware/ -m hardware -v
 	cd tests/dashboard/e2e && LEROBOT_DASHBOARD_E2E_HARDWARE=1 npm test
 
 build-internal:

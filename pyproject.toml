@@ -303,6 +303,9 @@ explicit = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "hardware: tests that require physical hardware (SO-101, cameras, etc.) — skipped in CI",
+]
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux'" }]

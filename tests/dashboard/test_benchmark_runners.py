@@ -421,10 +421,10 @@ async def test_robot_env_runner_loop_steps_and_records(tmp_path: Path) -> None:
         def __init__(self) -> None:
             self.actions_received: list[dict] = []
 
-        def get_observation(self, robot_id: str) -> dict:
+        async def read_observation(self, robot_id: str) -> dict:
             return {"joint_0": 0.1, "joint_1": -0.2, "joint_2": 0.3}
 
-        def send_action(self, robot_id: str, action: dict) -> None:
+        async def send_action(self, robot_id: str, action: dict) -> None:
             self.actions_received.append(action)
 
     fake_manager = _FakeRobotManager()
@@ -472,12 +472,12 @@ async def test_robot_env_runner_respects_cancellation(tmp_path: Path) -> None:
     call_count = 0
 
     class _FakeRobotManager:
-        def get_observation(self, robot_id: str) -> dict:
+        async def read_observation(self, robot_id: str) -> dict:
             nonlocal call_count
             call_count += 1
             return {"joint_0": 0.0}
 
-        def send_action(self, robot_id: str, action: dict) -> None:
+        async def send_action(self, robot_id: str, action: dict) -> None:
             pass
 
     run = _RunShim(
