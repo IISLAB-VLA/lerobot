@@ -373,7 +373,7 @@ function ConnectionKindOption({
 interface Step2SerialProps {
   state: DraftSerial;
   setState: React.Dispatch<React.SetStateAction<DraftSerial>>;
-  devices: Array<{ path: string; description?: string | null }>;
+  devices: Array<{ port: string; description?: string | null; product?: string | null }>;
   isLoading: boolean;
 }
 
@@ -394,12 +394,15 @@ function Step2Serial({ state, setState, devices, isLoading }: Step2SerialProps):
             onChange={(e) => setState((s) => ({ ...s, port: e.target.value }))}
           >
             <option value="">Select a port…</option>
-            {devices.map((d) => (
-              <option key={d.path} value={d.path}>
-                {d.path}
-                {d.description ? ` — ${d.description}` : ""}
-              </option>
-            ))}
+            {devices.map((d) => {
+              const label = d.product ?? d.description;
+              return (
+                <option key={d.port} value={d.port}>
+                  {d.port}
+                  {label ? ` — ${label}` : ""}
+                </option>
+              );
+            })}
           </Select>
         ) : (
           <Input
@@ -575,7 +578,7 @@ function ProbeStatus({ state }: ProbeStatusProps): JSX.Element | null {
 
 interface Step3CamerasProps {
   cameras: DraftCamera[];
-  videoDevices: Array<{ path: string; name?: string | null }>;
+  videoDevices: Array<{ id: string; path?: string | null; name?: string | null }>;
   onAdd: () => void;
   onRemove: (id: string) => void;
   onUpdate: (id: string, patch: Partial<DraftCamera>) => void;
@@ -626,7 +629,7 @@ function Step3Cameras({
 
 interface CameraDraftRowProps {
   camera: DraftCamera;
-  videoDevices: Array<{ path: string; name?: string | null }>;
+  videoDevices: Array<{ id: string; path?: string | null; name?: string | null }>;
   onRemove: () => void;
   onUpdate: (patch: Partial<DraftCamera>) => void;
 }
@@ -719,12 +722,16 @@ function CameraDraftRow({
               onChange={(e) => onUpdate({ devicePath: e.target.value })}
             >
               <option value="">Select device…</option>
-              {videoDevices.map((d) => (
-                <option key={d.path} value={d.path}>
-                  {d.path}
-                  {d.name ? ` — ${d.name}` : ""}
-                </option>
-              ))}
+              {videoDevices.map((d) => {
+                const value = d.path ?? d.id;
+                const label = d.name ?? d.id;
+                return (
+                  <option key={d.id} value={value}>
+                    {value}
+                    {label !== value ? ` — ${label}` : ""}
+                  </option>
+                );
+              })}
             </Select>
           ) : (
             <Input

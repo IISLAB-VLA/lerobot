@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Loader2, Video, VideoOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWebRTCStream } from "@/hooks/useWebRTCStream";
@@ -22,7 +22,16 @@ function VideoTileImpl({
   className,
 }: VideoTileProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const { phase, stream, error, sessionId, appliedCodecs, restart } = useWebRTCStream({
+  const {
+    phase,
+    stream,
+    error,
+    sessionId,
+    appliedCodecs,
+    reconnectAttempt,
+    nextReconnectAt,
+    restart,
+  } = useWebRTCStream({
     robotId,
     cameraId: camera.id,
     enabled,
@@ -47,7 +56,7 @@ function VideoTileImpl({
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [sessionId]);
 
-  const overlay = renderOverlay(phase, error, restart);
+  const overlay = renderOverlay(phase, error, restart, reconnectAttempt, nextReconnectAt);
   const codecBadge = appliedCodecs[0]?.split("/")[1] ?? null;
 
   return (
@@ -87,13 +96,17 @@ function renderOverlay(
   phase: string,
   error: string | null,
   restart: () => void,
+  reconnectAttempt: number,
+  nextReconnectAt: number | null,
 ): JSX.Element | null {
   if (phase === "live") return null;
   if (phase === "negotiating" || phase === "connecting") {
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-sm">
         <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
-        <span className="ml-2">Connecting…</span>
+        <span className="ml-2">
+          {reconnectAttempt > 0 ? `Reconnecting (attempt ${reconnectAttempt})…` : "Connecting…"}
+        </span>
       </div>
     );
   }
@@ -102,8 +115,11 @@ function renderOverlay(
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 p-4 text-center text-sm">
         <AlertTriangle className="h-5 w-5 text-destructive" aria-hidden />
         <span>{error ?? "Stream error"}</span>
+        {nextReconnectAt !== null ? (
+          <ReconnectCountdown targetMs={nextReconnectAt} attempt={reconnectAttempt} />
+        ) : null}
         <Button size="sm" variant="secondary" onClick={restart}>
-          Retry
+          Retry now
         </Button>
       </div>
     );
@@ -117,6 +133,28 @@ function renderOverlay(
     );
   }
   return null;
+}
+
+function ReconnectCountdown({
+  targetMs,
+  attempt,
+}: {
+  targetMs: number;
+  attempt: number;
+}): JSX.Element {
+  const [remaining, setRemaining] = useState(() => Math.max(0, targetMs - Date.now()));
+  useEffect(() => {
+    const tick = () => setRemaining(Math.max(0, targetMs - Date.now()));
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
+  }, [targetMs]);
+  const seconds = Math.ceil(remaining / 1000);
+  return (
+    <span className="text-xs text-white/70" aria-live="polite">
+      Auto-retry in {seconds}s · attempt {attempt}
+    </span>
+  );
 }
 
 function PhaseBadge({ phase }: { phase: string }): JSX.Element {

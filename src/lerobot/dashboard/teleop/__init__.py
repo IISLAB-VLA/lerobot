@@ -23,6 +23,7 @@ from lerobot.dashboard.teleop.deadman import (
     DeadmanState,
     DeadmanStateMachine,
 )
+from lerobot.dashboard.teleop.dispatcher import TeleopDispatcher
 from lerobot.dashboard.teleop.protocol import (
     ClientFrame,
     ClientFrameType,
@@ -58,6 +59,7 @@ __all__ = [
     "ProtocolError",
     "ServerFrame",
     "ServerFrameType",
+    "TeleopDispatcher",
     "TeleopEvent",
     "TeleopEventKind",
     "parse_teleop_event",
