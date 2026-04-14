@@ -14,10 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from lerobot.configs import FeatureType, PipelineFeatureType, PolicyFeature
 from lerobot.model import RobotKinematics
@@ -221,13 +224,18 @@ class EEBoundsAndSafety(RobotActionProcessorStep):
         # Clip position
         pos = np.clip(pos, self.end_effector_bounds["min"], self.end_effector_bounds["max"])
 
-        # Check for jumps in position
+        # Check for jumps in position. If the commanded step exceeds
+        # ``max_ee_step_m``, clip the step vector to that length rather than
+        # aborting: this acts as a saturating velocity limiter on the EE so
+        # spurious spikes (re-latch transients, phone jerk, IK flips) don't
+        # crash teleop. The previous code computed the clipped pos but then
+        # unconditionally raised, leaving the clip as dead code.
         if self._last_pos is not None:
             dpos = pos - self._last_pos
             n = float(np.linalg.norm(dpos))
-            if n > self.max_ee_step_m and n > 0:
+            if n > self.max_ee_step_m > 0:
                 pos = self._last_pos + dpos * (self.max_ee_step_m / n)
-                raise ValueError(f"EE jump {n:.3f}m > {self.max_ee_step_m}m")
+                logger.debug("EE jump clipped: %.4f m -> %.4f m", n, self.max_ee_step_m)
 
         self._last_pos = pos
 
@@ -264,12 +272,18 @@ class InverseKinematicsEEToJoints(RobotActionProcessorStep):
         q_curr: Internal state storing the last joint positions, used as an initial guess for the IK solver.
         initial_guess_current_joints: If True, use the robot's current joint state as the IK guess.
             If False, use the solution from the previous step.
+        position_weight: Weight on the EE position error passed to the solver.
+        orientation_weight: Weight on the EE orientation error passed to the solver.
+            Set to 0.0 for position-only IK (recommended for 5-DOF arms like SO100/SO101
+            to avoid joint-flipping when the commanded orientation is unreachable).
     """
 
     kinematics: RobotKinematics
     motor_names: list[str]
     q_curr: np.ndarray | None = field(default=None, init=False, repr=False)
     initial_guess_current_joints: bool = True
+    position_weight: float = 1.0
+    orientation_weight: float = 0.01
 
     def action(self, action: RobotAction) -> RobotAction:
         x = action.pop("ee.x")
@@ -308,7 +322,12 @@ class InverseKinematicsEEToJoints(RobotActionProcessorStep):
         t_des[:3, 3] = [x, y, z]
 
         # Compute inverse kinematics
-        q_target = self.kinematics.inverse_kinematics(self.q_curr, t_des)
+        q_target = self.kinematics.inverse_kinematics(
+            self.q_curr,
+            t_des,
+            position_weight=self.position_weight,
+            orientation_weight=self.orientation_weight,
+        )
         self.q_curr = q_target
 
         # TODO: This is sentitive to order of motor_names = q_target mapping

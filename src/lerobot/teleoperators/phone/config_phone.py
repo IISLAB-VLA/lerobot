@@ -34,3 +34,10 @@ class PhoneConfig(TeleoperatorConfig):
     camera_offset = np.array(
         [0.0, -0.02, 0.04]
     )  # iPhone 14 Pro camera is 2cm off center and 4cm above center
+    # Hz at which the HEBI SDK pulls feedback from the phone. Higher = lower
+    # staleness, but also more UDP traffic / CPU. iOS app seems stable up to ~200 Hz.
+    feedback_frequency_hz: float = 100.0
+    # Seconds connect() waits after registering the feedback handler so the
+    # first IO packet (containing the user's held-button state) lands before
+    # calibration begins. Lower = faster startup, higher = safer first latch.
+    connect_warmup_s: float = 0.5

@@ -78,14 +78,28 @@ class MapPhoneActionToRobotAction(RobotActionProcessorStep):
                 a - b
             )  # Positive if a is pressed, negative if b is pressed, 0 if both or neither are pressed
 
-        # For some actions we need to invert the axis
+        # Remap phone-body axes to robot-base axes.
+        #
+        # The calibration prompt (see IOSPhone.calibrate) instructs the user to
+        # hold the phone with: top edge (phone body +y) along robot +x, and
+        # screen (phone body +z) along robot +z. Right-handed frames then fix
+        # phone body +x along robot -y.
+        #
+        # ``pos`` / ``rotvec`` are already expressed in the phone body frame
+        # at calibration (see IOSPhone.get_action), so the remap is a pure
+        # basis swap:
+        #     robot_x = +pos[1]     (phone body +y)
+        #     robot_y = -pos[0]     (phone body -x)
+        #     robot_z = +pos[2]     (phone body +z)
+        # and the same rotation matrix applies to the rotvec (rotations
+        # transform as vectors under proper rotations).
         action["enabled"] = enabled
-        action["target_x"] = -pos[1] if enabled else 0.0
-        action["target_y"] = pos[0] if enabled else 0.0
+        action["target_x"] = pos[1] if enabled else 0.0
+        action["target_y"] = -pos[0] if enabled else 0.0
         action["target_z"] = pos[2] if enabled else 0.0
         action["target_wx"] = rotvec[1] if enabled else 0.0
-        action["target_wy"] = rotvec[0] if enabled else 0.0
-        action["target_wz"] = -rotvec[2] if enabled else 0.0
+        action["target_wy"] = -rotvec[0] if enabled else 0.0
+        action["target_wz"] = rotvec[2] if enabled else 0.0
         action["gripper_vel"] = gripper_vel  # Still send gripper action when disabled
         return action
 

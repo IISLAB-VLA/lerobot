@@ -162,6 +162,9 @@ wandb/
 # Dev scripts
 .dev/
 
+# Claude Code
+.claude/
+
 # Data folders
 data/
 outputs/
