@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Sliders } from "lucide-react";
+import { ArrowLeft, Disc3, Sliders } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import {
@@ -20,6 +20,9 @@ import {
 import { StreamLayout } from "@/components/streaming/StreamLayout";
 import { useStreamStageShortcuts } from "@/hooks/useStreamStageShortcuts";
 import { TeleopPanel } from "@/components/teleop/TeleopPanel";
+import { StartRecordingModal } from "@/components/recording/StartRecordingModal";
+import { RecordingIndicator } from "@/components/recording/RecordingIndicator";
+import type { RecordingSession } from "@/lib/api/recordings";
 
 async function listCameras(): Promise<CameraEntry[]> {
   try {
@@ -36,7 +39,11 @@ export function RobotDetailPage(): JSX.Element {
   const [layout, setLayout] = useState<StreamLayoutKind>("single");
   const [spotlightCameraId, setSpotlightCameraId] = useState<string | null>(null);
   const [streamsEnabled, setStreamsEnabled] = useState(true);
+  const [recordingOpen, setRecordingOpen] = useState(false);
+  const [activeRecording, setActiveRecording] = useState<RecordingSession | null>(null);
+  const [finishedRecording, setFinishedRecording] = useState<RecordingSession | null>(null);
   const stageRef = useRef<HTMLElement>(null);
+  const recordingEnabled = import.meta.env.VITE_ENABLE_RECORDING === "1";
 
   const robotsQuery = useQuery<RobotEntry[]>({
     queryKey: ["robots"],
@@ -136,6 +143,29 @@ export function RobotDetailPage(): JSX.Element {
         </div>
 
         <div className="flex items-center gap-2">
+          {recordingEnabled ? (
+            <Button
+              variant={activeRecording ? "destructive" : "outline"}
+              size="sm"
+              onClick={() => {
+                if (activeRecording) {
+                  // The indicator owns the stop flow; clicking again is a no-op.
+                  return;
+                }
+                setFinishedRecording(null);
+                setRecordingOpen(true);
+              }}
+              disabled={statusKind !== "online"}
+              title={
+                statusKind !== "online"
+                  ? "Connect the robot to start recording"
+                  : "Start a new recording"
+              }
+            >
+              <Disc3 className="h-4 w-4" aria-hidden />
+              {activeRecording ? "Recording…" : "Record"}
+            </Button>
+          ) : null}
           {import.meta.env.VITE_ENABLE_CALIBRATION === "1" ? (
             <Button asChild variant="outline" size="sm">
               <Link to={`/robots/${robot.id}/calibrate`}>
@@ -159,8 +189,35 @@ export function RobotDetailPage(): JSX.Element {
         </div>
       </header>
 
+      {recordingEnabled && activeRecording ? (
+        <RecordingIndicator
+          session={activeRecording}
+          onFinished={(_, outcome) => {
+            setActiveRecording(null);
+            setFinishedRecording(outcome);
+          }}
+        />
+      ) : null}
+
+      {recordingEnabled && finishedRecording && !activeRecording ? (
+        <RecordingSummary
+          session={finishedRecording}
+          onDismiss={() => setFinishedRecording(null)}
+        />
+      ) : null}
+
       {import.meta.env.VITE_ENABLE_TELEOP === "1" ? (
         <TeleopPanel robotId={robot.id} enabled={statusKind === "online"} />
+      ) : null}
+
+      {recordingEnabled ? (
+        <StartRecordingModal
+          open={recordingOpen}
+          onOpenChange={setRecordingOpen}
+          robotId={robot.id}
+          robotName={robot.name}
+          onStarted={(session) => setActiveRecording(session)}
+        />
       ) : null}
 
       <section
@@ -191,6 +248,46 @@ export function RobotDetailPage(): JSX.Element {
           <kbd className="rounded border px-1">Esc</kbd> exit fullscreen.
         </p>
       )}
+    </div>
+  );
+}
+
+function RecordingSummary({
+  session,
+  onDismiss,
+}: {
+  session: RecordingSession;
+  onDismiss: () => void;
+}): JSX.Element {
+  const ok = session.status === "saved";
+  return (
+    <div
+      role="status"
+      className={`flex items-center justify-between gap-3 rounded-md border px-4 py-2 text-sm ${
+        ok ? "border-emerald-500/40 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5"
+      }`}
+      data-testid="recording-summary"
+    >
+      <div className="flex flex-col">
+        <span className="font-medium">
+          {ok ? "Recording saved" : `Recording ${session.status}`}
+        </span>
+        <span className="font-mono text-xs text-muted-foreground">
+          {session.dataset_name} · {session.frames_captured} frames
+          {session.episode_index !== null ? ` · episode ${session.episode_index}` : ""}
+        </span>
+        {session.dataset_path ? (
+          <span className="font-mono text-[11px] text-muted-foreground" title={session.dataset_path}>
+            {session.dataset_path}
+          </span>
+        ) : null}
+        {session.error ? (
+          <span className="text-xs text-destructive">{session.error}</span>
+        ) : null}
+      </div>
+      <Button variant="ghost" size="sm" onClick={onDismiss}>
+        Dismiss
+      </Button>
     </div>
   );
 }
