@@ -4,6 +4,7 @@ interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string;
   readonly VITE_ENABLE_CALIBRATION?: string;
   readonly VITE_ENABLE_TELEOP?: string;
+  readonly VITE_ENABLE_RECORDING?: string;
 }
 
 interface ImportMeta {
