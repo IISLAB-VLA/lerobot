@@ -35,15 +35,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 from uuid import UUID
 
 from lerobot.dashboard.services.robot_manager import RobotManagerProtocol
-from lerobot.dashboard.services.teleop_manager import TeleopManagerProtocol
 from lerobot.dashboard.teleop.adapters.base import SourceState, TeleopEventSource
 from lerobot.dashboard.teleop.deadman import DeadmanStateMachine
 from lerobot.dashboard.teleop.protocol import TeleopEvent
 from lerobot.dashboard.teleop.validator import ActionValidationError, ActionValidator
+
+if TYPE_CHECKING:
+    from lerobot.dashboard.services.teleop_manager import TeleopManagerProtocol
 
 logger = logging.getLogger(__name__)
 
