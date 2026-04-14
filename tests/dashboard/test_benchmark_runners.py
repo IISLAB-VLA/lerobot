@@ -36,24 +36,32 @@ class _FakeBox:
 class _FakeVecEnv:
     """Single-env vector wrapper that terminates after ``terminate_at`` steps."""
 
-    def __init__(self, action_dim: int = 2, terminate_at: int = 4) -> None:
+    def __init__(self, action_dim: int = 2, terminate_at: int = 4, with_image: bool = False) -> None:
         self.single_action_space = _FakeBox(shape=(action_dim,))
         self.action_space = _FakeBox(shape=(1, action_dim))
         self._steps = 0
         self._terminate_at = terminate_at
         self._closed = False
+        self._with_image = with_image
 
     def reset(self, seed: int | None = None) -> tuple:
         self._steps = 0
-        return np.zeros((1, 8), dtype=np.float32), {}
+        return self._make_obs(), {}
 
     def step(self, action: np.ndarray) -> tuple:
         self._steps += 1
         terminated = np.array([self._steps >= self._terminate_at])
         truncated = np.array([False])
         reward = np.array([float(self._steps) * 0.1], dtype=np.float32)
-        obs = np.full((1, 8), float(self._steps), dtype=np.float32)
-        return obs, reward, terminated, truncated, {}
+        return self._make_obs(), reward, terminated, truncated, {}
+
+    def _make_obs(self):
+        if self._with_image:
+            # gym dict obs with a (1, H, W, 3) pixels array — Pusht-shaped.
+            pixels = np.full((1, 8, 8, 3), self._steps % 256, dtype=np.uint8)
+            agent_pos = np.zeros((1, 2), dtype=np.float32)
+            return {"pixels": pixels, "agent_pos": agent_pos}
+        return np.full((1, 8), float(self._steps), dtype=np.float32)
 
     def close(self) -> None:
         self._closed = True
@@ -216,6 +224,55 @@ async def test_runner_propagates_env_package_missing(tmp_path: Path) -> None:
         await runner(run, publish)
     assert events and events[-1]["type"] == "error"
     assert events[-1]["code"] == "EnvPackageMissing"
+
+
+async def test_runner_writes_observation_jpgs_when_obs_contains_image(tmp_path: Path) -> None:
+    def _factory(env_name: str) -> dict:
+        return {env_name: {0: _FakeVecEnv(action_dim=2, terminate_at=2, with_image=True)}}
+
+    run = _RunShim(
+        run_id="run-img",
+        env_name="pusht",
+        episodes=1,
+        seed=7,
+        storage_dir=tmp_path,
+    )
+
+    async def publish(_run: _RunShim, event: dict) -> None:
+        pass
+
+    runner = RandomActionEnvRunner(env_factory=_factory, max_steps_per_episode=10)
+    await runner(run, publish)
+
+    table = pq.read_table(tmp_path / "trajectory.parquet")
+    assert "obs_jpg_path" in table.column_names
+    paths = table.column("obs_jpg_path").to_pylist()
+    assert paths == ["observations/episode_0/step_0.jpg", "observations/episode_0/step_1.jpg"]
+    for rel in paths:
+        assert (tmp_path / rel).is_file()
+        # File should be a JPG header (FFD8FF).
+        head = (tmp_path / rel).read_bytes()[:3]
+        assert head == b"\xff\xd8\xff"
+
+
+async def test_runner_obs_jpg_path_null_when_no_image_in_obs(tmp_path: Path) -> None:
+    run = _RunShim(
+        run_id="run-noimg",
+        env_name="pusht",
+        episodes=1,
+        seed=0,
+        storage_dir=tmp_path,
+    )
+
+    async def publish(_run: _RunShim, event: dict) -> None:
+        pass
+
+    runner = RandomActionEnvRunner(env_factory=_fake_factory, max_steps_per_episode=10)
+    await runner(run, publish)
+    table = pq.read_table(tmp_path / "trajectory.parquet")
+    assert all(p is None for p in table.column("obs_jpg_path").to_pylist())
+    # No observations directory should be created.
+    assert not (tmp_path / "observations").exists()
 
 
 async def test_runner_honours_cancellation_between_steps(tmp_path: Path) -> None:
