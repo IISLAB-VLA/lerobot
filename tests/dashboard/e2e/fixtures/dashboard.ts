@@ -1,13 +1,15 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface DashboardFixtures {
   screenshotDir: string;
   captureFullPage: (page: Page, name: string) => Promise<string>;
 }
 
-const SCREENSHOT_ROOT = resolve(__dirname, "../screenshots");
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+const SCREENSHOT_ROOT = resolve(MODULE_DIR, "../screenshots");
 
 export const test = base.extend<DashboardFixtures>({
   screenshotDir: async ({}, use) => {

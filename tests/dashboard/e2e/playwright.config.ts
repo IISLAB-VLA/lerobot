@@ -32,7 +32,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `uv run lerobot-dashboard --host 127.0.0.1 --port ${PORT}`,
+    command: `uv run lerobot-dashboard --host 127.0.0.1 --port ${PORT} --static-dir src/lerobot/dashboard/static`,
     url: `${BASE_URL}/api/health`,
     cwd: "../../../",
     env: {
