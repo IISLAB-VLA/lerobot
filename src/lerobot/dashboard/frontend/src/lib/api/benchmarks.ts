@@ -57,7 +57,20 @@ export interface BenchmarkStepEvent {
   reward: number;
   done: boolean;
   progress: number;
+  /** Relative path (storage_dir-relative) — for parquet only, FE should use obs_jpg_url. */
   obs_jpg_path?: string | null;
+  /** Absolute URL ready for <img src>. Absent when env has no visual obs. */
+  obs_jpg_url?: string | null;
+}
+
+export interface BenchmarkPreviewReadyEvent {
+  type: "preview_ready";
+  episode: number;
+  policy_slug: string;
+  /** storage_dir-relative path — FE should use preview_url. */
+  preview_path: string;
+  /** Absolute URL ready for <video src>. */
+  preview_url: string;
 }
 
 export interface BenchmarkRunEvent {
@@ -83,7 +96,8 @@ export type BenchmarkServerEvent =
   | BenchmarkStepEvent
   | BenchmarkRunEvent
   | BenchmarkErrorEvent
-  | BenchmarkDoneEvent;
+  | BenchmarkDoneEvent
+  | BenchmarkPreviewReadyEvent;
 
 // ── REST clients ──────────────────────────────────────────────────────────────
 
