@@ -104,6 +104,110 @@ def test_robot_network_connection(client: TestClient) -> None:
     assert body["connection"]["protocol"] == "rtde"
 
 
+def test_custom_protocol_on_rtde_port_is_upgraded(client: TestClient) -> None:
+    payload = {
+        "name": "ur-custom",
+        "robot_type": "ur",
+        "connection": {
+            "kind": "network",
+            "protocol": "custom",
+            "host": "10.0.0.5",
+            "port": 30004,
+        },
+    }
+    body = client.post("/api/robots", json=payload).json()
+    assert body["connection"]["protocol"] == "rtde"
+
+
+def test_custom_protocol_on_fci_port_is_upgraded(client: TestClient) -> None:
+    payload = {
+        "name": "franka",
+        "robot_type": "ur",
+        "connection": {
+            "kind": "network",
+            "protocol": "custom",
+            "host": "10.0.0.6",
+            "port": 10001,
+        },
+    }
+    body = client.post("/api/robots", json=payload).json()
+    assert body["connection"]["protocol"] == "fci"
+
+
+def test_explicit_rtde_on_nonstandard_port_is_preserved(client: TestClient) -> None:
+    """User explicitly picked ``rtde`` — don't downgrade even on port 5555."""
+    payload = {
+        "name": "ur-override",
+        "robot_type": "ur",
+        "connection": {
+            "kind": "network",
+            "protocol": "rtde",
+            "host": "10.0.0.7",
+            "port": 5555,
+        },
+    }
+    body = client.post("/api/robots", json=payload).json()
+    assert body["connection"]["protocol"] == "rtde"
+    assert body["connection"]["port"] == 5555
+
+
+def test_custom_protocol_on_unknown_port_stays_custom(client: TestClient) -> None:
+    payload = {
+        "name": "generic",
+        "robot_type": "ur",
+        "connection": {
+            "kind": "network",
+            "protocol": "custom",
+            "host": "10.0.0.8",
+            "port": 4242,
+        },
+    }
+    body = client.post("/api/robots", json=payload).json()
+    assert body["connection"]["protocol"] == "custom"
+
+
+def test_image_ref_auto_filled_from_asset_manager(client: TestClient) -> None:
+    """``POST /api/robots`` without ``image_ref`` must populate via AssetManager."""
+    body = client.post("/api/robots", json=_robot_payload()).json()
+    assert body["image_ref"] is not None
+    assert body["image_ref"].startswith("/resources/robots/")
+
+
+def test_image_ref_preserves_user_value(client: TestClient) -> None:
+    payload = _robot_payload()
+    payload["image_ref"] = "/custom/path.png"
+    body = client.post("/api/robots", json=payload).json()
+    assert body["image_ref"] == "/custom/path.png"
+
+
+def test_patch_connection_triggers_protocol_upgrade(client: TestClient) -> None:
+    created = client.post(
+        "/api/robots",
+        json={
+            "name": "evolving",
+            "robot_type": "ur",
+            "connection": {
+                "kind": "network",
+                "protocol": "custom",
+                "host": "10.0.0.9",
+                "port": 4242,
+            },
+        },
+    ).json()
+    patched = client.patch(
+        f"/api/robots/{created['id']}",
+        json={
+            "connection": {
+                "kind": "network",
+                "protocol": "custom",
+                "host": "10.0.0.9",
+                "port": 10001,
+            }
+        },
+    ).json()
+    assert patched["connection"]["protocol"] == "fci"
+
+
 def test_create_robot_unknown_camera(client: TestClient) -> None:
     resp = client.post("/api/robots", json=_robot_payload(cameras=[str(uuid4())]))
     assert resp.status_code == 422
