@@ -71,6 +71,12 @@ class StreamSession:
     source: FrameSource
     applied_codecs: list[str] = field(default_factory=list)
     quality: QualitySettings = field(default_factory=QualitySettings)
+    # Target encoder bitrate in bits/s — applied lazily because aiortc
+    # instantiates the encoder only on first frame. Re-applied on every
+    # ``request_keyframe`` (including auto-fires on camera recovery).
+    desired_bitrate_bps: int | None = None
+    # Count of successful keyframe requests — exposed in stats for tests.
+    keyframes_requested: int = 0
 
 
 class SignalingManager:
@@ -92,12 +98,21 @@ class SignalingManager:
         """Build a session from a browser offer and return (session, answer)."""
         source = await self._provider.open(robot_id, camera_id)
         pc = RTCPeerConnection()
-        track = LeRobotCameraTrack(source)
+
+        session_id = uuid.uuid4().hex
+
+        def _on_recover() -> None:
+            # Fired when the track transitions from failing back to live.
+            # We request a keyframe so the browser decoder can resync without
+            # waiting for the next natural keyframe interval.
+            self._request_keyframes_sync(session_id)
+
+        track = LeRobotCameraTrack(source, on_recover=_on_recover)
         sender = pc.addTrack(track)
         applied = apply_codec_preference(sender)
 
         session = StreamSession(
-            session_id=uuid.uuid4().hex,
+            session_id=session_id,
             robot_id=robot_id,
             camera_id=camera_id,
             pc=pc,
@@ -111,6 +126,12 @@ class SignalingManager:
             logger.info("session %s: connection state %s", session.session_id, pc.connectionState)
             if pc.connectionState in {"failed", "closed"}:
                 await self.close_session(session.session_id)
+            elif pc.connectionState == "connected":
+                # Fresh connect / ICE restart — ensure the decoder gets a
+                # keyframe right away and any pending bitrate target lands.
+                self._request_keyframes_sync(session.session_id)
+                if session.desired_bitrate_bps is not None:
+                    _apply_bitrate(pc, session.desired_bitrate_bps)
 
         await pc.setRemoteDescription(RTCSessionDescription(sdp=offer_sdp, type=offer_type))
         answer = await pc.createAnswer()
@@ -155,11 +176,44 @@ class SignalingManager:
             session.track.set_size(merged.width, merged.height)  # type: ignore[arg-type]
 
         if merged.bitrate_kbps is not None:
-            _apply_bitrate(session.pc, merged.bitrate_kbps)
+            target_bps = max(int(merged.bitrate_kbps) * 1000, 10_000)
+            session.desired_bitrate_bps = target_bps
+            _apply_bitrate(session.pc, target_bps)
 
         session.quality = merged
         logger.info("session %s quality updated: %s", session_id, merged)
         return merged
+
+    async def request_keyframe(self, session_id: str) -> int:
+        """Force every video sender on the session to emit a keyframe.
+
+        Returns the number of senders that were successfully signalled.
+        """
+        session = self._require(session_id)
+        return self._request_keyframes_sync(session_id, session=session)
+
+    def _request_keyframes_sync(
+        self, session_id: str, *, session: StreamSession | None = None
+    ) -> int:
+        """Non-async variant usable from synchronous aiortc callbacks."""
+        session = session or self._sessions.get(session_id)
+        if session is None:
+            return 0
+        signalled = 0
+        for sender in session.pc.getSenders():
+            if sender.track is None or sender.track.kind != "video":
+                continue
+            try:
+                sender._send_keyframe()
+                signalled += 1
+            except Exception:  # pragma: no cover - best-effort keyframe
+                logger.debug("sender._send_keyframe unavailable; skipping")
+        if signalled and session.desired_bitrate_bps is not None:
+            # Keyframe is a good moment to re-assert the bitrate target —
+            # the encoder has definitely been instantiated by now.
+            _apply_bitrate(session.pc, session.desired_bitrate_bps)
+        session.keyframes_requested += signalled
+        return signalled
 
     async def stats(self, session_id: str) -> list[dict[str, Any]]:
         session = self._require(session_id)
@@ -220,24 +274,31 @@ def _parse_ice_candidate(payload: dict[str, Any]) -> RTCIceCandidate | None:
     return candidate
 
 
-def _apply_bitrate(pc: RTCPeerConnection, bitrate_kbps: int) -> None:
-    """Set maxBitrate on every video sender's first encoding."""
-    max_bps = max(int(bitrate_kbps) * 1000, 10_000)
+def _apply_bitrate(pc: RTCPeerConnection, bitrate_bps: int) -> int:
+    """Set the target bitrate on every video sender's live encoder.
+
+    aiortc 1.14 does not expose ``RTCRtpSender.setParameters`` — the only
+    lever on the bitrate is the encoder's ``target_bitrate`` attribute
+    (``H264Encoder`` / ``Vp8Encoder``). The encoder is created lazily
+    inside aiortc when the first frame flows, so this helper silently
+    no-ops if no encoder is live yet. Returns the count of encoders that
+    were updated so callers can schedule a retry.
+    """
+    updated = 0
     for sender in pc.getSenders():
         if sender.track is None or sender.track.kind != "video":
             continue
-        try:
-            params = sender.getParameters()
-        except Exception:  # pragma: no cover - parameters not available yet
+        encoder = _sender_encoder(sender)
+        if encoder is None or not hasattr(encoder, "target_bitrate"):
             continue
-        if not params.encodings:
-            continue
-        for encoding in params.encodings:
-            encoding.maxBitrate = max_bps
-        try:
-            sender.setParameters(params)
-        except Exception:  # pragma: no cover - set not supported on this aiortc
-            logger.debug("sender.setParameters unsupported; skipping bitrate update")
+        encoder.target_bitrate = int(bitrate_bps)
+        updated += 1
+    return updated
+
+
+def _sender_encoder(sender: Any) -> Any | None:
+    """Reach into aiortc's name-mangled ``__encoder`` slot on the sender."""
+    return getattr(sender, "_RTCRtpSender__encoder", None)
 
 
 def _flatten_stat(entry: Any) -> dict[str, Any]:

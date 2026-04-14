@@ -19,6 +19,7 @@ import asyncio
 import fractions
 import logging
 import time
+from typing import Callable
 
 import av
 import numpy as np
@@ -46,6 +47,7 @@ class LeRobotCameraTrack(VideoStreamTrack):
         height: int | None = None,
         frame_timeout_s: float = _DEFAULT_FRAME_TIMEOUT_S,
         stale_frame_max_age_s: float = _DEFAULT_STALE_FRAME_MAX_AGE_S,
+        on_recover: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self._source = source
@@ -57,6 +59,7 @@ class LeRobotCameraTrack(VideoStreamTrack):
         self._cache = _LastFrameCache()
         self._stale_max_age_s = stale_frame_max_age_s
         self._consecutive_failures = 0
+        self._on_recover = on_recover
 
     def set_size(self, width: int, height: int) -> None:
         """Update the output resolution applied on the next :meth:`recv` call."""
@@ -81,6 +84,11 @@ class LeRobotCameraTrack(VideoStreamTrack):
     async def _read_with_fallback(self) -> np.ndarray:
         try:
             ndarray = await asyncio.wait_for(self._source.read(), timeout=self._frame_timeout_s)
+            if self._consecutive_failures > 0 and self._on_recover is not None:
+                try:
+                    self._on_recover()
+                except Exception:  # pragma: no cover - recovery hook is best-effort
+                    logger.exception("on_recover hook raised")
             self._consecutive_failures = 0
             self._cache.set(ndarray)
             return ndarray
