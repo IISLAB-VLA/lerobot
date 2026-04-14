@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from lerobot.dashboard.api import cameras, devices, health, robots, teleops
-from lerobot.dashboard.api import calibration  # noqa: I001 — must come after others to avoid teleop circular import
+from lerobot.dashboard.api import benchmarks, calibration  # noqa: I001 — must come after others to avoid teleop circular import
 from lerobot.dashboard.streaming import build_streams_router
 
 
@@ -18,5 +18,6 @@ def build_api_router() -> APIRouter:
     router.include_router(cameras.router)
     router.include_router(teleops.router)
     router.include_router(calibration.router)
+    router.include_router(benchmarks.router)
     router.include_router(build_streams_router())
     return router
