@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { VideoTile } from "@/components/streaming/VideoTile";
 import type { CameraEntry } from "@/lib/api/robots";
+import type { ParsedStreamStats } from "@/lib/api/streams";
 import type { StreamLayoutKind } from "@/components/streaming/layouts";
 
 interface StreamLayoutProps {
@@ -10,6 +11,10 @@ interface StreamLayoutProps {
   spotlightCameraId: string | null;
   onSpotlightChange: (cameraId: string) => void;
   enabled: boolean;
+  showStats: boolean;
+  statsBySessionId: Map<string, ParsedStreamStats>;
+  cameraToSession: Map<string, string>;
+  onSessionChange: (cameraId: string, sessionId: string | null) => void;
 }
 
 export function StreamLayout({
@@ -19,6 +24,10 @@ export function StreamLayout({
   spotlightCameraId,
   onSpotlightChange,
   enabled,
+  showStats,
+  statsBySessionId,
+  cameraToSession,
+  onSessionChange,
 }: StreamLayoutProps): JSX.Element {
   const { primary, rest } = useMemo(() => {
     if (layout !== "spotlight") return { primary: null, rest: cameras };
@@ -30,6 +39,22 @@ export function StreamLayout({
     };
   }, [layout, cameras, spotlightCameraId]);
 
+  const tileFor = (camera: CameraEntry, emphasised?: boolean): JSX.Element => {
+    const sessionId = cameraToSession.get(camera.id) ?? null;
+    const stats = sessionId ? statsBySessionId.get(sessionId) ?? null : null;
+    return (
+      <VideoTile
+        robotId={robotId}
+        camera={camera}
+        enabled={enabled}
+        emphasised={emphasised}
+        stats={stats}
+        showStats={showStats}
+        onSessionChange={onSessionChange}
+      />
+    );
+  };
+
   if (cameras.length === 0) {
     return (
       <div className="flex aspect-video w-full items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
@@ -40,11 +65,7 @@ export function StreamLayout({
 
   if (layout === "single") {
     const only = cameras[0]!;
-    return (
-      <div className="aspect-video w-full">
-        <VideoTile robotId={robotId} camera={only} enabled={enabled} />
-      </div>
-    );
+    return <div className="aspect-video w-full">{tileFor(only)}</div>;
   }
 
   if (layout === "horizontal-split") {
@@ -52,12 +73,8 @@ export function StreamLayout({
     const bottom = cameras[1];
     return (
       <div className="grid aspect-video w-full grid-rows-2 gap-2">
-        <VideoTile robotId={robotId} camera={top} enabled={enabled} />
-        {bottom ? (
-          <VideoTile robotId={robotId} camera={bottom} enabled={enabled} />
-        ) : (
-          <div />
-        )}
+        {tileFor(top)}
+        {bottom ? tileFor(bottom) : <div />}
       </div>
     );
   }
@@ -67,12 +84,8 @@ export function StreamLayout({
     const right = cameras[1];
     return (
       <div className="grid aspect-video w-full grid-cols-2 gap-2">
-        <VideoTile robotId={robotId} camera={left} enabled={enabled} />
-        {right ? (
-          <VideoTile robotId={robotId} camera={right} enabled={enabled} />
-        ) : (
-          <div />
-        )}
+        {tileFor(left)}
+        {right ? tileFor(right) : <div />}
       </div>
     );
   }
@@ -85,7 +98,7 @@ export function StreamLayout({
         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
       >
         {cameras.map((cam) => (
-          <VideoTile key={cam.id} robotId={robotId} camera={cam} enabled={enabled} />
+          <div key={cam.id}>{tileFor(cam)}</div>
         ))}
       </div>
     );
@@ -94,11 +107,7 @@ export function StreamLayout({
   // spotlight
   return (
     <div className="grid aspect-video w-full grid-cols-[1fr_14rem] gap-2">
-      {primary ? (
-        <VideoTile robotId={robotId} camera={primary} enabled={enabled} emphasised />
-      ) : (
-        <div />
-      )}
+      {primary ? tileFor(primary, true) : <div />}
       <div className="flex flex-col gap-2 overflow-y-auto pr-1">
         {rest.map((cam) => (
           <button
@@ -108,7 +117,7 @@ export function StreamLayout({
             className="aspect-video w-full rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={`Spotlight ${cam.name}`}
           >
-            <VideoTile robotId={robotId} camera={cam} enabled={enabled} />
+            {tileFor(cam)}
           </button>
         ))}
       </div>

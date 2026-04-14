@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { useWebRTCStream } from "@/hooks/useWebRTCStream";
 import type { CameraEntry } from "@/lib/api/robots";
 import { Button } from "@/components/ui/button";
-import { postKeyframe } from "@/lib/api/streams";
+import { postKeyframe, type ParsedStreamStats } from "@/lib/api/streams";
 
 interface VideoTileProps {
   robotId: string;
@@ -12,6 +12,9 @@ interface VideoTileProps {
   enabled: boolean;
   emphasised?: boolean;
   className?: string;
+  stats?: ParsedStreamStats | null;
+  showStats?: boolean;
+  onSessionChange?: (cameraId: string, sessionId: string | null) => void;
 }
 
 function VideoTileImpl({
@@ -20,6 +23,9 @@ function VideoTileImpl({
   enabled,
   emphasised,
   className,
+  stats,
+  showStats,
+  onSessionChange,
 }: VideoTileProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const {
@@ -56,6 +62,13 @@ function VideoTileImpl({
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [sessionId]);
 
+  useEffect(() => {
+    onSessionChange?.(camera.id, sessionId);
+    return () => {
+      onSessionChange?.(camera.id, null);
+    };
+  }, [camera.id, sessionId, onSessionChange]);
+
   const overlay = renderOverlay(phase, error, restart, reconnectAttempt, nextReconnectAt);
   const codecBadge = appliedCodecs[0]?.split("/")[1] ?? null;
 
@@ -78,6 +91,27 @@ function VideoTileImpl({
         className="h-full w-full bg-black object-contain"
       />
       {overlay}
+      {showStats && stats ? (
+        <dl
+          className="pointer-events-none absolute right-2 top-2 grid grid-cols-[auto_auto] gap-x-2 gap-y-0.5 rounded bg-black/65 px-2 py-1 text-[10px] font-mono text-white/85"
+          data-testid="video-tile-stats"
+        >
+          <dt>fps</dt>
+          <dd className="text-right">{formatStat(stats.fps, 1)}</dd>
+          <dt>kbps</dt>
+          <dd className="text-right">{formatStat(stats.bitrateKbps, 0)}</dd>
+          <dt>rtt</dt>
+          <dd className="text-right">
+            {stats.rttMs !== null ? `${stats.rttMs.toFixed(0)} ms` : "—"}
+          </dd>
+          <dt>jitter</dt>
+          <dd className="text-right">
+            {stats.jitterMs !== null ? `${stats.jitterMs.toFixed(1)} ms` : "—"}
+          </dd>
+          <dt>dropped</dt>
+          <dd className="text-right">{formatStat(stats.framesDropped, 0)}</dd>
+        </dl>
+      ) : null}
       <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/75 to-transparent px-3 py-2 text-xs">
         <span className="flex items-center gap-1.5 font-medium">
           <Video className="h-3.5 w-3.5" aria-hidden />
@@ -155,6 +189,11 @@ function ReconnectCountdown({
       Auto-retry in {seconds}s · attempt {attempt}
     </span>
   );
+}
+
+function formatStat(value: number | null, digits: number): string {
+  if (value === null || !Number.isFinite(value)) return "—";
+  return value.toFixed(digits);
 }
 
 function PhaseBadge({ phase }: { phase: string }): JSX.Element {
