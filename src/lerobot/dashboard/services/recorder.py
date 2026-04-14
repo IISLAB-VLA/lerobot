@@ -137,6 +137,15 @@ class _Session:
     # Per-camera frame subscriber, populated on session start. ``None`` until
     # ``start()`` opens the cameras and wires up the iterators.
     camera_iters: dict[UUID, AsyncIterator[Any]] = field(default_factory=dict)
+    # Graceful-stop signal. ``stop()`` sets this so the capture loop can
+    # finish its current ``add_frame`` on the worker thread before exiting;
+    # avoids cancelling in the middle of a parquet append and leaving
+    # columns at mismatched lengths.
+    stop_requested: asyncio.Event = field(default_factory=asyncio.Event)
+    # Guards the actual ``dataset.add_frame`` write so ``stop``'s call to
+    # ``save_episode`` / ``finalize`` can't race with a writer thread that
+    # survived cooperative shutdown.
+    write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 class RecorderService:
@@ -244,13 +253,27 @@ class RecorderService:
                 raise RecorderConflictError(f"session {session_id} is already stopping")
             session.model = session.model.model_copy(update={"status": "stopping"})
 
+        # Request cooperative shutdown and give the loop a short window to
+        # finish any in-flight ``add_frame``. If the loop is stuck we fall
+        # back to cancellation; the write_lock below still guards the
+        # writer thread so finalize observes a consistent column state.
+        session.stop_requested.set()
         if session.task is not None:
-            session.task.cancel()
-            with suppress(asyncio.CancelledError):
-                await session.task
+            try:
+                await asyncio.wait_for(session.task, timeout=5.0)
+            except TimeoutError:
+                session.task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await session.task
+            except asyncio.CancelledError:
+                pass
 
         await self._close_camera_subscribers(session)
-        summary = await asyncio.to_thread(self._finalize_dataset, session, save)
+        # Wait for any writer thread that survived cancellation before
+        # flushing; running finalize concurrently with an in-flight
+        # add_frame leaves columns at mismatched lengths in parquet.
+        async with session.write_lock:
+            summary = await asyncio.to_thread(self._finalize_dataset, session, save)
         async with session.lock:
             session.model = summary
         await self._emit(
@@ -411,7 +434,7 @@ class RecorderService:
         heartbeat_interval = 1.0
         next_heartbeat = time.monotonic() + heartbeat_interval
         try:
-            while True:
+            while not session.stop_requested.is_set():
                 tick = time.monotonic()
                 drop = await self._capture_one_frame(session)
                 async with session.lock:
@@ -437,7 +460,16 @@ class RecorderService:
                     )
                     next_heartbeat = now + heartbeat_interval
                 elapsed = time.monotonic() - tick
-                await asyncio.sleep(max(0.0, period - elapsed))
+                # Wait for the next tick, but return immediately if ``stop``
+                # signals — avoids paying a full fps period before exiting.
+                try:
+                    await asyncio.wait_for(
+                        session.stop_requested.wait(),
+                        timeout=max(0.0, period - elapsed),
+                    )
+                    return
+                except TimeoutError:
+                    continue
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -499,8 +531,13 @@ class RecorderService:
 
         if session.dataset_handle is None:
             return True
+        # Hold ``write_lock`` for the duration of the writer thread so
+        # ``stop``'s finalize call waits behind any frame still appending
+        # columns — prevents the "expected length N but got N-1" parquet
+        # crash when the loop is cancelled mid-append.
         try:
-            await asyncio.to_thread(session.dataset_handle.add_frame, frame)
+            async with session.write_lock:
+                await asyncio.to_thread(session.dataset_handle.add_frame, frame)
         except Exception as exc:
             logger.warning("add_frame failed: %s", exc)
             return True
