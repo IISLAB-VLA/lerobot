@@ -215,6 +215,24 @@ class RobotStatus(BaseModel):
     connected_at: datetime | None = None
 
 
+class CameraStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    open: bool = False
+    last_error: str | None = None
+    opened_at: datetime | None = None
+    subscriber_count: int = 0
+
+
+class TeleopStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    attached: bool = False
+    bound_robot_id: UUID | None = None
+    last_error: str | None = None
+    attached_at: datetime | None = None
+
+
 # ---------------------------------------------------------------------------
 # Registry document
 # ---------------------------------------------------------------------------
@@ -235,6 +253,7 @@ __all__ = [
     "CameraBackend",
     "CameraEntry",
     "CameraSource",
+    "CameraStatus",
     "Connection",
     "KnownRobotType",
     "NetworkConnection",
@@ -245,4 +264,5 @@ __all__ = [
     "SerialConnection",
     "TeleopEntry",
     "TeleopKind",
+    "TeleopStatus",
 ]

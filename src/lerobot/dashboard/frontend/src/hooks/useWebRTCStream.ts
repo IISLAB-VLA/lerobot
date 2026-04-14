@@ -20,6 +20,8 @@ export interface StreamState {
   appliedCodecs: string[];
   error: string | null;
   stream: MediaStream | null;
+  reconnectAttempt: number;
+  nextReconnectAt: number | null;
 }
 
 export interface UseWebRTCStreamArgs {
@@ -34,6 +36,8 @@ interface UseWebRTCStreamResult extends StreamState {
 }
 
 const DEFAULT_ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+const RECONNECT_BASE_MS = 1_000;
+const RECONNECT_MAX_MS = 30_000;
 
 export function useWebRTCStream({
   robotId,
@@ -47,15 +51,46 @@ export function useWebRTCStream({
   const [error, setError] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [restartCount, setRestartCount] = useState(0);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [nextReconnectAt, setNextReconnectAt] = useState<number | null>(null);
 
   const sessionIdRef = useRef<string | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current !== null) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    setNextReconnectAt(null);
+  }, []);
+
+  const scheduleReconnect = useCallback(() => {
+    const attempt = reconnectAttemptRef.current;
+    const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attempt);
+    reconnectAttemptRef.current = attempt + 1;
+    setReconnectAttempt(attempt + 1);
+    setNextReconnectAt(Date.now() + delay);
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      setNextReconnectAt(null);
+      setRestartCount((n) => n + 1);
+    }, delay);
+  }, []);
 
   const restart = useCallback(() => {
+    clearReconnectTimer();
+    reconnectAttemptRef.current = 0;
+    setReconnectAttempt(0);
     setRestartCount((n) => n + 1);
-  }, []);
+  }, [clearReconnectTimer]);
 
   useEffect(() => {
     if (!enabled || !robotId || !cameraId) {
+      clearReconnectTimer();
+      reconnectAttemptRef.current = 0;
+      setReconnectAttempt(0);
       setPhase("idle");
       setSessionId(null);
       setAppliedCodecs([]);
@@ -90,11 +125,20 @@ export function useWebRTCStream({
     pc.onconnectionstatechange = () => {
       if (cancelled) return;
       const s = pc.connectionState;
-      if (s === "connected") setPhase("live");
-      else if (s === "failed" || s === "disconnected") {
+      if (s === "connected") {
+        setPhase("live");
+        reconnectAttemptRef.current = 0;
+        setReconnectAttempt(0);
+        clearReconnectTimer();
+      } else if (s === "failed" || s === "disconnected") {
         setPhase("error");
         setError(`peer ${s}`);
-      } else if (s === "closed") setPhase("closed");
+        if (reconnectTimerRef.current === null) {
+          scheduleReconnect();
+        }
+      } else if (s === "closed") {
+        setPhase("closed");
+      }
     };
 
     pc.onicecandidate = (event) => {
@@ -138,6 +182,9 @@ export function useWebRTCStream({
               : "unknown error";
         setPhase("error");
         setError(message);
+        if (!(err instanceof StreamingUnavailableError) && reconnectTimerRef.current === null) {
+          scheduleReconnect();
+        }
       }
     };
 
@@ -157,7 +204,22 @@ export function useWebRTCStream({
       sessionIdRef.current = null;
       if (sid) void postStop(sid);
     };
-  }, [robotId, cameraId, enabled, iceServers, restartCount]);
+  }, [robotId, cameraId, enabled, iceServers, restartCount, clearReconnectTimer, scheduleReconnect]);
 
-  return { phase, sessionId, appliedCodecs, error, stream, restart };
+  useEffect(() => {
+    return () => {
+      clearReconnectTimer();
+    };
+  }, [clearReconnectTimer]);
+
+  return {
+    phase,
+    sessionId,
+    appliedCodecs,
+    error,
+    stream,
+    reconnectAttempt,
+    nextReconnectAt,
+    restart,
+  };
 }

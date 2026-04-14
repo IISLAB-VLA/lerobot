@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from fastapi import HTTPException, Request, status
 
+from lerobot.dashboard.services.assets import AssetManager
+from lerobot.dashboard.services.camera_manager import CameraManagerProtocol
 from lerobot.dashboard.services.registry import (
     Registry,
     RegistryError,
@@ -11,6 +13,7 @@ from lerobot.dashboard.services.registry import (
     RegistryValidationError,
 )
 from lerobot.dashboard.services.robot_manager import RobotManagerProtocol
+from lerobot.dashboard.services.teleop_manager import TeleopManagerProtocol
 
 
 def get_registry(request: Request) -> Registry:
@@ -32,6 +35,39 @@ def get_robot_manager(request: Request) -> RobotManagerProtocol:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="robot manager is not initialized",
+        )
+    return manager
+
+
+def get_camera_manager(request: Request) -> CameraManagerProtocol:
+    state = request.app.state.dashboard
+    manager = state.camera_manager
+    if manager is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="camera manager is not initialized",
+        )
+    return manager
+
+
+def get_assets(request: Request) -> AssetManager:
+    state = request.app.state.dashboard
+    assets = state.assets
+    if assets is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="asset manager is not initialized",
+        )
+    return assets
+
+
+def get_teleop_manager(request: Request) -> TeleopManagerProtocol:
+    state = request.app.state.dashboard
+    manager = state.teleop_manager
+    if manager is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="teleop manager is not initialized",
         )
     return manager
 

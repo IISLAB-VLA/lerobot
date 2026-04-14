@@ -19,9 +19,14 @@ from lerobot.dashboard.teleop import (
     ClientFrameType,
     DeadmanState,
     DeadmanStateMachine,
+    GamepadEvent,
+    KeyboardEvent,
+    MouseEvent,
     ProtocolError,
     ServerFrame,
     ServerFrameType,
+    TeleopEventKind,
+    parse_teleop_event,
 )
 
 
@@ -62,6 +67,39 @@ def test_client_frame_unknown_type_raises():
         ClientFrame.from_json(
             {"seq": 1, "ts_client_ms": 0, "type": "panic", "payload": {}}
         )
+
+
+def test_parse_teleop_event_decodes_every_kind():
+    kb = parse_teleop_event({"kind": "keyboard", "key": "w", "pressed": True})
+    assert isinstance(kb, KeyboardEvent)
+    assert kb.kind is TeleopEventKind.KEYBOARD
+    assert (kb.key, kb.pressed) == ("w", True)
+
+    mouse = parse_teleop_event({"kind": "mouse", "dx": 1.5, "dy": -2.0, "buttons": 1})
+    assert isinstance(mouse, MouseEvent)
+    assert (mouse.dx, mouse.dy, mouse.buttons) == (1.5, -2.0, 1)
+
+    pad = parse_teleop_event(
+        {"kind": "gamepad", "axes": [0.1, -0.2], "buttons": [False, True]}
+    )
+    assert isinstance(pad, GamepadEvent)
+    assert pad.axes == (0.1, -0.2)
+    assert pad.buttons == (False, True)
+
+
+def test_parse_teleop_event_missing_discriminator_raises():
+    with pytest.raises(ProtocolError):
+        parse_teleop_event({"key": "w", "pressed": True})
+
+
+def test_parse_teleop_event_unknown_kind_raises():
+    with pytest.raises(ProtocolError):
+        parse_teleop_event({"kind": "imu", "values": [0.0]})
+
+
+def test_parse_teleop_event_malformed_keyboard_raises():
+    with pytest.raises(ProtocolError):
+        parse_teleop_event({"kind": "keyboard", "pressed": True})  # missing 'key'
 
 
 def test_server_frame_to_json_is_json_safe():

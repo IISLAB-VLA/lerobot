@@ -26,9 +26,15 @@ from lerobot.dashboard.teleop.deadman import (
 from lerobot.dashboard.teleop.protocol import (
     ClientFrame,
     ClientFrameType,
+    GamepadEvent,
+    KeyboardEvent,
+    MouseEvent,
     ProtocolError,
     ServerFrame,
     ServerFrameType,
+    TeleopEvent,
+    TeleopEventKind,
+    parse_teleop_event,
 )
 from lerobot.dashboard.teleop.validator import (
     ActionSpec,
@@ -45,8 +51,14 @@ __all__ = [
     "ClientFrameType",
     "DeadmanState",
     "DeadmanStateMachine",
+    "GamepadEvent",
     "HEARTBEAT_TIMEOUT_MS",
+    "KeyboardEvent",
+    "MouseEvent",
     "ProtocolError",
     "ServerFrame",
     "ServerFrameType",
+    "TeleopEvent",
+    "TeleopEventKind",
+    "parse_teleop_event",
 ]
