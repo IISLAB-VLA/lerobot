@@ -25,9 +25,11 @@ from lerobot.dashboard.streaming.session import (
     StreamSession,
 )
 from lerobot.dashboard.streaming.source import (
+    CameraManagerFrameSource,
     FrameSource,
     FrameSourceError,
     FrameSourceProvider,
+    RegistryFrameSourceProvider,
     StubFrameSource,
     StubFrameSourceProvider,
 )
@@ -35,11 +37,13 @@ from lerobot.dashboard.streaming.track import LeRobotCameraTrack
 
 __all__ = [
     "CODEC_PREFERENCE",
+    "CameraManagerFrameSource",
     "FrameSource",
     "FrameSourceError",
     "FrameSourceProvider",
     "LeRobotCameraTrack",
     "QualitySettings",
+    "RegistryFrameSourceProvider",
     "SignalingManager",
     "StreamSession",
     "StubFrameSource",
