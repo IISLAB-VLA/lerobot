@@ -130,6 +130,7 @@ dashboard = [
     "aiofiles>=24.1.0",
     "python-multipart>=0.0.9",
     "huggingface-hub>=0.34.4",
+    "ur-rtde>=1.5.7",
     "lerobot[core_scripts]",
 ]
 # lerobot-eval -- base evaluation framework. You also need the policy's extra (e.g., lerobot[pi])

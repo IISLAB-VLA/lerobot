@@ -65,10 +65,12 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info(
-            "dashboard starting (storage=%s, static=%s, cors=%s)",
+            "dashboard starting (storage=%s, static=%s, cors=%s, fake_devices=%s, fake_policy=%s)",
             resolved.storage_dir,
             resolved.static_dir,
             list(resolved.cors_origins),
+            resolved.fake_devices,
+            resolved.fake_policy,
         )
         try:
             yield

@@ -28,6 +28,7 @@ def test_health_returns_ok(app_client: TestClient) -> None:
     assert "version" in body
     assert "python" in body
     assert body["uptime_seconds"] >= 0.0
+    assert body["flags"] == {"fake_devices": False, "fake_policy": False}
 
 
 def test_cors_preflight_allowed(app_client: TestClient) -> None:
@@ -46,3 +47,14 @@ def test_events_websocket_heartbeat(app_client: TestClient) -> None:
     with app_client.websocket_connect("/ws/events") as ws:
         msg = ws.receive_json()
         assert msg == {"type": "heartbeat"}
+
+
+def test_fake_devices_flag_propagates(tmp_path: Path) -> None:
+    config = DashboardConfig(
+        storage_dir=tmp_path / "storage",
+        fake_devices=True,
+        fake_policy=True,
+    )
+    client = TestClient(create_app(config))
+    body = client.get("/api/health").json()
+    assert body["flags"] == {"fake_devices": True, "fake_policy": True}
