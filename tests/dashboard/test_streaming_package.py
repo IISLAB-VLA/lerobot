@@ -398,6 +398,27 @@ def test_router_offer_ice_stats_quality_stop_cycle():
             )
             assert missing.status_code == 404
 
+            # Batch stats: without filter returns every active session.
+            batch_all = client.get("/api/streams/stats")
+            assert batch_all.status_code == 200, batch_all.text
+            bodies = batch_all.json()["sessions"]
+            assert any(s["session_id"] == sid for s in bodies)
+            assert all(isinstance(s["entries"], list) for s in bodies)
+
+            # Batch stats: with a filter only returns the requested sids;
+            # unknown ids are silently omitted (soft-miss for the UI).
+            batch_filtered = client.get(
+                "/api/streams/stats", params={"session_ids": f"{sid},does-not-exist"}
+            )
+            assert batch_filtered.status_code == 200
+            filtered_bodies = batch_filtered.json()["sessions"]
+            assert [s["session_id"] for s in filtered_bodies] == [sid]
+
+            # Empty filter ('') is treated as "no filter" (all sessions).
+            batch_empty = client.get("/api/streams/stats", params={"session_ids": ""})
+            assert batch_empty.status_code == 200
+            assert any(s["session_id"] == sid for s in batch_empty.json()["sessions"])
+
             # Keyframe route returns the count of signalled senders.
             kf_resp = client.post(f"/api/streams/{sid}/keyframe")
             assert kf_resp.status_code == 200, kf_resp.text

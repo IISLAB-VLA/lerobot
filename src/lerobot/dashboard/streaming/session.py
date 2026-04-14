@@ -220,6 +220,38 @@ class SignalingManager:
         report = await session.pc.getStats()
         return [_flatten_stat(entry) for entry in report.values()]
 
+    async def stats_many(
+        self, session_ids: list[str] | None = None
+    ) -> list[tuple[str, list[dict[str, Any]]]]:
+        """Gather stats for several sessions in one pass.
+
+        ``session_ids=None`` returns every live session. Otherwise only the
+        listed ids are queried. Sessions that have just been closed (race
+        against a concurrent ``close_session``) are silently omitted so the
+        UI can treat "missing sid" as "unsubscribe this tile" without
+        needing an explicit ``state`` field.
+        """
+        async with self._lock:
+            candidates = (
+                list(self._sessions.values())
+                if session_ids is None
+                else [self._sessions[sid] for sid in session_ids if sid in self._sessions]
+            )
+        # getStats() coroutines run without the manager lock — holding it
+        # across the aiortc call would serialise stats across sessions and
+        # defeat the batch point.
+        results: list[tuple[str, list[dict[str, Any]]]] = []
+        for session in candidates:
+            try:
+                report = await session.pc.getStats()
+            except Exception:  # pragma: no cover - pc may have closed mid-call
+                logger.debug("stats() skipped for %s (pc unavailable)", session.session_id)
+                continue
+            results.append(
+                (session.session_id, [_flatten_stat(entry) for entry in report.values()])
+            )
+        return results
+
     async def close_session(self, session_id: str) -> None:
         async with self._lock:
             session = self._sessions.pop(session_id, None)
