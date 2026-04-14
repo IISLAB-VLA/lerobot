@@ -25,10 +25,35 @@ mock devices without real hardware (see Task #4 / robotics-integrator).
 # from repo root
 make dashboard-e2e            # rebuilds the Vite bundle first
 make dashboard-e2e-nobuild    # skips the rebuild (fast inner loop)
+make dashboard-e2e-hardware   # opt-in, real hardware, @hardware specs only
 
 # or directly
 cd tests/dashboard/e2e && npm test
 ```
+
+## Hardware smoke (`@hardware`)
+
+`specs/10_hardware_smoke.spec.ts` and any future `@hardware`-tagged test runs
+only when `LEROBOT_DASHBOARD_E2E_HARDWARE=1` is set (Makefile target
+`dashboard-e2e-hardware`). The default run uses `grepInvert: /@hardware/` so
+these specs never execute in CI.
+
+Prerequisites:
+
+- SO-101 follower arm attached at `/dev/ttyACM0` (user must have permission
+  to open the tty — check `groups` includes `dialout` on Linux).
+- USB cameras at `/dev/video0` (belly), `/dev/video2` (top), `/dev/video4`
+  (wrist). The spec uses the belly cam only; the extra ports are available
+  for future multi-view cases.
+- No other process holding the serial port or the `/dev/video0` node.
+
+The smoke scenario walks device discovery → UI Add-Robot flow → manager
+`POST /connect` → detail page deep-link → first WebRTC frame
+(`HTMLVideoElement.readyState >= 2`) → `POST /disconnect`. It never calls
+`pkill` — Playwright's `webServer` owns the backend lifecycle, and we
+explicitly avoid `pkill -f lerobot-dashboard` because that pattern also
+matches teammate agent command lines and has crashed the whole session
+before.
 
 ## Visual regression
 
