@@ -634,7 +634,7 @@ class RobotEnvRunner:
     """Benchmark runner that drives a live robot instead of a gym env.
 
     Replaces the gym ``vec_env.step`` loop with
-    :meth:`RobotManagerProtocol.get_observation` /
+    :meth:`RobotManagerProtocol.read_observation` /
     :meth:`~RobotManagerProtocol.send_action` calls so the benchmark
     pipeline can exercise real hardware without a gym dependency.
 
@@ -655,7 +655,7 @@ class RobotEnvRunner:
     robot_id:
         Key used to look up the robot in ``robot_manager``.
     robot_manager:
-        Any object implementing ``get_observation(robot_id)`` →
+        Any object implementing ``read_observation(robot_id)`` →
         ``dict[str, Any]`` and ``send_action(robot_id, action)`` →
         ``None``.  Matches :class:`~lerobot.dashboard.services.robot_manager.RobotManagerProtocol`.
     policy_cache:
@@ -698,7 +698,7 @@ class RobotEnvRunner:
             if hasattr(self._policy, "eval"):
                 self._policy.eval()
 
-        obs = await asyncio.to_thread(self._robot_manager.get_observation, self._robot_id)
+        obs = await self._robot_manager.read_observation(self._robot_id)
         if not obs:
             raise RuntimeError(
                 f"robot {self._robot_id!r} returned empty observation — "
@@ -742,12 +742,8 @@ class RobotEnvRunner:
                     return
 
                 action_dict = await asyncio.to_thread(self._choose_action, obs, action_keys)
-                await asyncio.to_thread(
-                    self._robot_manager.send_action, self._robot_id, action_dict
-                )
-                obs = await asyncio.to_thread(
-                    self._robot_manager.get_observation, self._robot_id
-                )
+                await self._robot_manager.send_action(self._robot_id, action_dict)
+                obs = await self._robot_manager.read_observation(self._robot_id)
 
                 done = step == self._max_steps - 1
                 action_flat = [float(action_dict.get(k, 0.0)) for k in action_keys]

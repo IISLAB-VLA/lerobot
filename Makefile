@@ -12,11 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-<<<<<<< HEAD
-.PHONY: tests dashboard-e2e dashboard-e2e-nobuild dashboard-e2e-install
-=======
-.PHONY: tests dashboard-e2e dashboard-e2e-install dashboard-e2e-nobuild
->>>>>>> dash-backend
+.PHONY: tests dashboard-e2e dashboard-e2e-nobuild dashboard-e2e-install dashboard-e2e-hardware
 
 PYTHON_PATH := $(shell which python)
 
@@ -58,6 +54,12 @@ dashboard-e2e: dashboard-frontend
 # or backend code changed; run 'make dashboard-e2e' after any frontend edit.
 dashboard-e2e-nobuild:
 	cd tests/dashboard/e2e && npm test
+
+# Hardware E2E smoke: drives real attached robots via pytest (no browser).
+# Requires: SO-101 connected at /dev/ttyACM0, lerobot[feetech] extra installed.
+# Tests are marked @pytest.mark.hardware and skip cleanly when hardware absent.
+dashboard-e2e-hardware:
+	uv run pytest tests/dashboard/e2e/hardware/ -m hardware -v
 
 build-internal:
 	docker build -f docker/Dockerfile.internal -t lerobot-internal .
