@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from lerobot.dashboard.api.router import build_api_router
 from lerobot.dashboard.core.config import DashboardConfig
 from lerobot.dashboard.core.state import AppState
+from lerobot.dashboard.services.assets import RESOURCE_URL_PREFIX, AssetManager
 from lerobot.dashboard.storage.paths import ensure_storage_dir
 from lerobot.dashboard.ws.router import build_ws_router
 
@@ -60,7 +61,8 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
     _configure_logging(resolved.log_level)
     ensure_storage_dir(resolved.storage_dir)
 
-    state = AppState(config=resolved)
+    assets = AssetManager(resolved.storage_dir)
+    state = AppState(config=resolved, assets=assets)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -94,6 +96,12 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
 
     app.include_router(build_api_router())
     app.include_router(build_ws_router())
+
+    app.mount(
+        RESOURCE_URL_PREFIX,
+        StaticFiles(directory=str(assets.robots_dir)),
+        name="robot-images",
+    )
 
     if resolved.static_dir is not None and resolved.static_dir.is_dir():
         app.mount(

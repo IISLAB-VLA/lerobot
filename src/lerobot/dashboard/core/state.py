@@ -22,6 +22,7 @@ class AppState:
     config: DashboardConfig
     startup_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     registry: Any | None = None
+    assets: Any | None = None
     live_robots: dict[str, Any] = field(default_factory=dict)
     live_cameras: dict[str, Any] = field(default_factory=dict)
     live_teleops: dict[str, Any] = field(default_factory=dict)
