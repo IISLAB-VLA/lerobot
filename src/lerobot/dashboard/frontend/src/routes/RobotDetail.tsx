@@ -43,7 +43,7 @@ export function RobotDetailPage(): JSX.Element {
   const [activeRecording, setActiveRecording] = useState<RecordingSession | null>(null);
   const [finishedRecording, setFinishedRecording] = useState<RecordingSession | null>(null);
   const stageRef = useRef<HTMLElement>(null);
-  const recordingEnabled = import.meta.env.VITE_ENABLE_RECORDING === "1";
+  const recordingEnabled = import.meta.env.VITE_ENABLE_RECORDING !== "0";
 
   const robotsQuery = useQuery<RobotEntry[]>({
     queryKey: ["robots"],
@@ -260,6 +260,7 @@ function RecordingSummary({
   onDismiss: () => void;
 }): JSX.Element {
   const ok = session.status === "saved";
+  const folderHref = session.dataset_path ? toFolderHref(session.dataset_path) : null;
   return (
     <div
       role="status"
@@ -276,8 +277,31 @@ function RecordingSummary({
           {session.dataset_name} · {session.frames_captured} frames
           {session.episode_index !== null ? ` · episode ${session.episode_index}` : ""}
         </span>
-        {session.dataset_path ? (
-          <span className="font-mono text-[11px] text-muted-foreground" title={session.dataset_path}>
+        {ok && folderHref ? (
+          <a
+            href={folderHref}
+            className="font-mono text-[11px] text-primary underline-offset-2 hover:underline"
+            title={session.dataset_path}
+            data-testid="open-dataset-folder"
+            onClick={(event) => {
+              // file:// links are silently blocked by most browsers when the page is on
+              // http(s); fall back to copying the path so the operator can paste it.
+              if (
+                folderHref.startsWith("file://") &&
+                window.location.protocol !== "file:"
+              ) {
+                event.preventDefault();
+                void navigator.clipboard?.writeText(session.dataset_path);
+              }
+            }}
+          >
+            Open dataset folder ({session.dataset_path})
+          </a>
+        ) : session.dataset_path ? (
+          <span
+            className="font-mono text-[11px] text-muted-foreground"
+            title={session.dataset_path}
+          >
             {session.dataset_path}
           </span>
         ) : null}
@@ -290,6 +314,14 @@ function RecordingSummary({
       </Button>
     </div>
   );
+}
+
+function toFolderHref(path: string): string {
+  // Strip a trailing dataset file (e.g. "...metadata.json"); show the parent dir.
+  const trimmed = path.replace(/\/+$/, "");
+  if (/^[a-z]+:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("/")) return `file://${trimmed}`;
+  return `file:///${trimmed.replace(/^([A-Za-z]):/, "$1:/")}`;
 }
 
 function summarizeConnection(robot: RobotEntry): string {
