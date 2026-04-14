@@ -19,6 +19,7 @@ from contextlib import suppress
 from uuid import UUID
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+from starlette.websockets import WebSocketState
 
 from lerobot.dashboard.services.benchmark import RunNotFoundError
 from lerobot.dashboard.services.calibration import SessionNotFoundError
@@ -32,6 +33,28 @@ from lerobot.dashboard.services.recorder import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def _safe_send_json(websocket: WebSocket, payload: dict) -> None:
+    """Send a JSON payload only while the socket is still open.
+
+    Starlette emits an ASGI warning when a handler does
+    ``websocket.send_*`` after a prior ``websocket.close`` — the terminal
+    error branches below are exactly those races (client unmounted while
+    the server was about to emit a final 'error' frame). Gating on
+    ``application_state`` keeps the log clean without swallowing real bugs.
+    """
+    if websocket.application_state != WebSocketState.CONNECTED:
+        return
+    with suppress(RuntimeError, WebSocketDisconnect):
+        await websocket.send_json(payload)
+
+
+async def _safe_close(websocket: WebSocket, code: int = 1000) -> None:
+    if websocket.application_state == WebSocketState.DISCONNECTED:
+        return
+    with suppress(RuntimeError, WebSocketDisconnect):
+        await websocket.close(code=code)
 
 
 def build_ws_router() -> APIRouter:
@@ -79,13 +102,12 @@ def build_ws_router() -> APIRouter:
                 except WebSocketDisconnect:
                     break
         except SessionNotFoundError as exc:
-            await websocket.send_json({"type": "error", "message": str(exc)})
+            await _safe_send_json(websocket, {"type": "error", "message": str(exc)})
         finally:
             drain.cancel()
             with suppress(asyncio.CancelledError, Exception):
                 await drain
-            with suppress(Exception):
-                await websocket.close()
+            await _safe_close(websocket)
 
     @router.websocket("/recordings/{session_id}")
     async def recordings(websocket: WebSocket, session_id: UUID) -> None:
@@ -99,8 +121,8 @@ def build_ws_router() -> APIRouter:
             async for event in recorder.subscribe(session_id):
                 await websocket.send_json(event.model_dump(mode="json"))
         except RecorderNotFoundError:
-            await websocket.send_json({"type": "error", "message": "session not found"})
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            await _safe_send_json(websocket, {"type": "error", "message": "session not found"})
+            await _safe_close(websocket, code=status.WS_1008_POLICY_VIOLATION)
         except WebSocketDisconnect:
             logger.debug("recordings ws disconnected (%s)", session_id)
 
@@ -128,17 +150,12 @@ def build_ws_router() -> APIRouter:
                 except WebSocketDisconnect:
                     break
         except RunNotFoundError as exc:
-            await websocket.send_json({"type": "error", "message": str(exc)})
+            await _safe_send_json(websocket, {"type": "error", "message": str(exc)})
         finally:
             drain.cancel()
-            try:
+            with suppress(asyncio.CancelledError, Exception):
                 await drain
-            except (asyncio.CancelledError, Exception):
-                pass
-            try:
-                await websocket.close()
-            except Exception:
-                pass
+            await _safe_close(websocket)
 
     @router.websocket("/inference/{session_id}")
     async def inference(websocket: WebSocket, session_id: UUID) -> None:
@@ -152,8 +169,8 @@ def build_ws_router() -> APIRouter:
             async for event in service.subscribe(session_id):
                 await websocket.send_json(event.model_dump(mode="json"))
         except InferenceNotFoundError:
-            await websocket.send_json({"type": "error", "message": "session not found"})
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            await _safe_send_json(websocket, {"type": "error", "message": "session not found"})
+            await _safe_close(websocket, code=status.WS_1008_POLICY_VIOLATION)
         except WebSocketDisconnect:
             logger.debug("inference ws disconnected (%s)", session_id)
 
