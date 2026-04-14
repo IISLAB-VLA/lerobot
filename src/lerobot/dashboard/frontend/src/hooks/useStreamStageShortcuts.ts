@@ -5,6 +5,7 @@ interface UseStreamStageShortcutsArgs {
   stageRef: RefObject<HTMLElement>;
   tileCount: number;
   onLayoutChange: (kind: StreamLayoutKind) => void;
+  onToggleStats?: () => void;
   enabled: boolean;
 }
 
@@ -34,6 +35,7 @@ export function useStreamStageShortcuts({
   stageRef,
   tileCount,
   onLayoutChange,
+  onToggleStats,
   enabled,
 }: UseStreamStageShortcutsArgs): void {
   useEffect(() => {
@@ -47,6 +49,12 @@ export function useStreamStageShortcuts({
       if (event.key === "f" || event.key === "F") {
         event.preventDefault();
         void toggleFullscreen(stageRef.current);
+        return;
+      }
+
+      if ((event.key === "i" || event.key === "I") && onToggleStats) {
+        event.preventDefault();
+        onToggleStats();
         return;
       }
 
@@ -71,5 +79,5 @@ export function useStreamStageShortcuts({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [stageRef, tileCount, onLayoutChange, enabled]);
+  }, [stageRef, tileCount, onLayoutChange, onToggleStats, enabled]);
 }

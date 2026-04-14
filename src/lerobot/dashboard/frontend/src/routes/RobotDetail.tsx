@@ -20,6 +20,7 @@ import {
 import { StreamLayout } from "@/components/streaming/StreamLayout";
 import { useStreamStageShortcuts } from "@/hooks/useStreamStageShortcuts";
 import { useStreamStats } from "@/hooks/useStreamStats";
+import { useStreamStatsStore } from "@/store/streamStats";
 import { TeleopPanel } from "@/components/teleop/TeleopPanel";
 import { StartRecordingModal } from "@/components/recording/StartRecordingModal";
 import { RecordingIndicator } from "@/components/recording/RecordingIndicator";
@@ -40,7 +41,8 @@ export function RobotDetailPage(): JSX.Element {
   const [layout, setLayout] = useState<StreamLayoutKind>("single");
   const [spotlightCameraId, setSpotlightCameraId] = useState<string | null>(null);
   const [streamsEnabled, setStreamsEnabled] = useState(true);
-  const [showStats, setShowStats] = useState(false);
+  const showStats = useStreamStatsStore((s) => s.showOverlay);
+  const toggleStats = useStreamStatsStore((s) => s.toggle);
   const [cameraSessions, setCameraSessions] = useState<Map<string, string>>(
     () => new Map(),
   );
@@ -91,27 +93,9 @@ export function RobotDetailPage(): JSX.Element {
     stageRef,
     tileCount: cameras.length,
     onLayoutChange: setLayout,
+    onToggleStats: toggleStats,
     enabled: cameras.length > 0,
   });
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
-      const target = event.target;
-      if (target instanceof HTMLElement) {
-        const tag = target.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-        if (target.isContentEditable) return;
-      }
-      if (event.key === "i" || event.key === "I") {
-        event.preventDefault();
-        setShowStats((v) => !v);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   const handleSessionChange = useCallback(
     (cameraId: string, sessionId: string | null) => {

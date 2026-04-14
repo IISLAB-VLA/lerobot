@@ -96,6 +96,14 @@ function VideoTileImpl({
           className="pointer-events-none absolute right-2 top-2 grid grid-cols-[auto_auto] gap-x-2 gap-y-0.5 rounded bg-black/65 px-2 py-1 text-[10px] font-mono text-white/85"
           data-testid="video-tile-stats"
         >
+          <dt>codec</dt>
+          <dd className="text-right">{codecBadge ?? "—"}</dd>
+          <dt>res</dt>
+          <dd className="text-right">
+            {stats.frameWidth !== null && stats.frameHeight !== null
+              ? `${stats.frameWidth}×${stats.frameHeight}`
+              : "—"}
+          </dd>
           <dt>fps</dt>
           <dd className="text-right">{formatStat(stats.fps, 1)}</dd>
           <dt>kbps</dt>
