@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AddRobotModal } from "@/components/robots/AddRobotModal";
 import { RobotCardGrid } from "@/components/robots/RobotCardGrid";
 import { api } from "@/lib/api";
 import { listRobots, type CameraEntry, type RobotEntry } from "@/lib/api/robots";
@@ -17,6 +19,8 @@ async function listCameras(): Promise<CameraEntry[]> {
 }
 
 export function RobotsPage(): JSX.Element {
+  const [modalOpen, setModalOpen] = useState(false);
+
   const robotsQuery = useQuery<RobotEntry[]>({
     queryKey: ["robots"],
     queryFn: listRobots,
@@ -39,7 +43,7 @@ export function RobotsPage(): JSX.Element {
             Registered robots and their live connection status.
           </p>
         </div>
-        <Button disabled title="Add-Robot modal lands in the next commit">
+        <Button onClick={() => setModalOpen(true)}>
           <Plus className="h-4 w-4" aria-hidden />
           Add robot
         </Button>
@@ -50,15 +54,17 @@ export function RobotsPage(): JSX.Element {
       ) : robotsQuery.isError ? (
         <ErrorState message={errorMessage(robotsQuery.error)} />
       ) : robots.length === 0 ? (
-        <EmptyState />
+        <EmptyState onAdd={() => setModalOpen(true)} />
       ) : (
         <RobotCardGrid robots={robots} cameras={cameras} />
       )}
+
+      <AddRobotModal open={modalOpen} onOpenChange={setModalOpen} />
     </div>
   );
 }
 
-function EmptyState(): JSX.Element {
+function EmptyState({ onAdd }: { onAdd: () => void }): JSX.Element {
   return (
     <div
       className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-input py-16 text-center"
@@ -68,6 +74,10 @@ function EmptyState(): JSX.Element {
       <p className="max-w-md text-sm text-muted-foreground">
         Add your first robot to start streaming video, teleoperating, and recording episodes.
       </p>
+      <Button onClick={onAdd}>
+        <Plus className="h-4 w-4" aria-hidden />
+        Add your first robot
+      </Button>
     </div>
   );
 }
