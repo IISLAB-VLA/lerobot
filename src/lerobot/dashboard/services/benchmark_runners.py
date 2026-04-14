@@ -33,7 +33,9 @@ if TYPE_CHECKING:  # pragma: no cover — import deferred until rollout time
 
 # Schema for trajectory.parquet. Action columns (``action_<key>``) are
 # appended dynamically in :class:`TrajectoryWriter` so multi-D action
-# spaces flatten cleanly without a column-of-lists.
+# spaces flatten cleanly without a column-of-lists. ``obs_jpg_path``
+# stores a path *relative to the run's storage_dir* so the parquet
+# survives a directory move.
 _TRAJECTORY_BASE_FIELDS: tuple[tuple[str, str], ...] = (
     ("run_id", "string"),
     ("policy_slug", "string"),
@@ -42,7 +44,11 @@ _TRAJECTORY_BASE_FIELDS: tuple[tuple[str, str], ...] = (
     ("reward", "float32"),
     ("done", "bool"),
     ("truncated", "bool"),
+    ("obs_jpg_path", "string"),
 )
+
+OBS_JPG_QUALITY = 85
+_IMAGE_OBS_KEYS: tuple[str, ...] = ("pixels", "image", "rgb", "observation.image", "observation.images.cam_high")
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +104,7 @@ class TrajectoryWriter:
         done: bool,
         truncated: bool,
         action: list[float],
+        obs_jpg_path: str | None = None,
     ) -> None:
         if len(action) != len(self.action_keys):
             raise ValueError(
@@ -113,6 +120,7 @@ class TrajectoryWriter:
             done,
             truncated,
             action,
+            obs_jpg_path,
         )
 
     def _append_sync(
@@ -124,6 +132,7 @@ class TrajectoryWriter:
         done: bool,
         truncated: bool,
         action: list[float],
+        obs_jpg_path: str | None,
     ) -> None:
         import pyarrow as pa
 
@@ -137,6 +146,7 @@ class TrajectoryWriter:
             "reward": [float(reward)],
             "done": [bool(done)],
             "truncated": [bool(truncated)],
+            "obs_jpg_path": [obs_jpg_path],
         }
         for key, value in zip(self.action_keys, action, strict=True):
             columns[f"action_{key}"] = [float(value)]
@@ -175,6 +185,73 @@ def _default_env_factory(env_name: str) -> dict[str, Any]:
     cls = EnvConfig.get_choice_class(env_name)
     cfg = cls()
     return make_env(cfg, n_envs=1)
+
+
+def _extract_image(obs: Any) -> Any | None:
+    """Return an ``(H, W, 3)`` ``uint8`` image or ``None``.
+
+    Tolerates the common gym shapes:
+
+    * dict obs → look for a known image key (``pixels``, ``image``, ``rgb``,
+      or any ``observation.image*`` key); fall back to the first ndarray
+      with a 3D ``(H, W, 3)`` shape.
+    * ndarray obs with shape ``(H, W, 3)`` → use as-is.
+    * vector-env ndarray with shape ``(n_envs, H, W, 3)`` → take ``obs[0]``.
+    """
+    import numpy as np
+
+    if isinstance(obs, dict):
+        for key in _IMAGE_OBS_KEYS:
+            value = obs.get(key)
+            if value is not None:
+                value = np.asarray(value)
+                value = _maybe_drop_vec_axis(value)
+                if _is_image_array(value):
+                    return value
+        for value in obs.values():
+            arr = np.asarray(value)
+            arr = _maybe_drop_vec_axis(arr)
+            if _is_image_array(arr):
+                return arr
+        return None
+    arr = np.asarray(obs)
+    arr = _maybe_drop_vec_axis(arr)
+    return arr if _is_image_array(arr) else None
+
+
+def _maybe_drop_vec_axis(arr: Any) -> Any:
+    """Strip a leading ``n_envs`` axis when present (we always run n_envs=1)."""
+    if hasattr(arr, "ndim") and arr.ndim == 4 and arr.shape[0] == 1:
+        return arr[0]
+    return arr
+
+
+def _is_image_array(arr: Any) -> bool:
+    if not hasattr(arr, "shape") or not hasattr(arr, "dtype"):
+        return False
+    if arr.ndim != 3 or arr.shape[-1] != 3:
+        return False
+    return arr.dtype.kind in {"u", "i", "f"}
+
+
+def _coerce_uint8(image: Any) -> Any:
+    import numpy as np
+
+    arr = np.asarray(image)
+    if arr.dtype != np.uint8:
+        if arr.dtype.kind == "f":
+            arr = np.clip(arr * 255.0 if arr.max() <= 1.0 else arr, 0, 255)
+        arr = arr.astype(np.uint8)
+    return arr
+
+
+def _save_jpeg(image: Any, dest: Path) -> None:
+    """Blocking JPG write. Caller wraps in :func:`asyncio.to_thread`."""
+    from PIL import Image
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    arr = _coerce_uint8(image)
+    Image.fromarray(arr).save(dest, "JPEG", quality=OBS_JPG_QUALITY)
 
 
 def _action_keys_from_space(space: Any, prefix: str = "a") -> list[str]:
@@ -246,6 +323,7 @@ class RandomActionEnvRunner:
     async def _rollout(self, run: Any, vec_env: Any, writer: TrajectoryWriter, publish: Any) -> None:
         import numpy as np
 
+        storage_dir = Path(run.storage_dir)
         for episode in range(run.episodes):
             if run.cancelled:
                 return
@@ -265,6 +343,8 @@ class RandomActionEnvRunner:
                 truncated_scalar = bool(np.asarray(truncated).flatten()[0])
                 action_flat = np.asarray(action).flatten().tolist()
 
+                obs_jpg_path = await self._maybe_save_obs(storage_dir, episode, step, obs)
+
                 await writer.append(
                     policy_slug=self.POLICY_SLUG,
                     episode=episode,
@@ -273,27 +353,38 @@ class RandomActionEnvRunner:
                     done=terminated_scalar,
                     truncated=truncated_scalar,
                     action=action_flat,
+                    obs_jpg_path=obs_jpg_path,
                 )
                 run.steps_total = writer.row_count
                 run.last_reward = reward_scalar
 
-                await publish(
-                    run,
-                    {
-                        "type": "step",
-                        "episode": episode,
-                        "step": step,
-                        "reward": reward_scalar,
-                        "done": terminated_scalar,
-                        "truncated": truncated_scalar,
-                        "policy_slug": self.POLICY_SLUG,
-                        "progress": (episode + (step + 1) / self._max_steps) / max(run.episodes, 1),
-                    },
-                )
+                step_event: dict[str, Any] = {
+                    "type": "step",
+                    "episode": episode,
+                    "step": step,
+                    "reward": reward_scalar,
+                    "done": terminated_scalar,
+                    "truncated": truncated_scalar,
+                    "policy_slug": self.POLICY_SLUG,
+                    "progress": (episode + (step + 1) / self._max_steps) / max(run.episodes, 1),
+                }
+                if obs_jpg_path is not None:
+                    step_event["obs_jpg_path"] = obs_jpg_path
+                await publish(run, step_event)
 
                 if terminated_scalar or truncated_scalar:
                     break
             run.progress = (episode + 1) / max(run.episodes, 1)
+
+    async def _maybe_save_obs(
+        self, storage_dir: Path, episode: int, step: int, obs: Any
+    ) -> str | None:
+        image = _extract_image(obs)
+        if image is None:
+            return None
+        rel_path = f"observations/episode_{episode}/step_{step}.jpg"
+        await asyncio.to_thread(_save_jpeg, image, storage_dir / rel_path)
+        return rel_path
 
     @staticmethod
     def _seed_for(base_seed: int | None, episode: int) -> int | None:
@@ -307,6 +398,7 @@ class RandomActionEnvRunner:
 
 
 __all__ = [
+    "OBS_JPG_QUALITY",
     "RandomActionEnvRunner",
     "TrajectoryWriter",
 ]
