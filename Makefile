@@ -31,7 +31,14 @@ build-user:
 
 # Dashboard E2E suite (Playwright + gemini-vision visual QA).
 # Spawns `uv run lerobot-dashboard` internally; requires the 'dashboard' extra installed.
-dashboard-e2e-install:
+# Depends on 'dashboard-frontend' so the Vite bundle exists before Playwright boots
+# the server with --static-dir src/lerobot/dashboard/static.
+#
+# Vite's emptyOutDir wipes static/.gitignore and static/.gitkeep during build;
+# restore them so the worktree stays clean after install. (Follow-up: frontend
+# team to switch to emptyOutDir=false or vite-plugin-static-copy.)
+dashboard-e2e-install: dashboard-frontend
+	@git checkout HEAD -- src/lerobot/dashboard/static/.gitignore src/lerobot/dashboard/static/.gitkeep 2>/dev/null || true
 	cd tests/dashboard/e2e && npm install && npx playwright install --with-deps chromium
 
 dashboard-e2e:
