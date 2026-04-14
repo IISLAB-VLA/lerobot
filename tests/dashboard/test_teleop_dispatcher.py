@@ -20,13 +20,17 @@ from lerobot.dashboard.services.registry_models import (
     CameraEntry,
     RobotEntry,
     RobotStatus,
+    TeleopEntry,
+    TeleopStatus,
 )
 from lerobot.dashboard.teleop import (
     ActionSpec,
     ActionValidator,
     DeadmanState,
     DeadmanStateMachine,
+    KeyboardEvent,
     TeleopDispatcher,
+    TeleopEvent,
 )
 from lerobot.dashboard.teleop.adapters.base import SourceState
 
@@ -69,6 +73,32 @@ class FakeRobotManager:
 
     async def read_observation(self, robot_id: UUID) -> dict[str, Any]:
         return {}
+
+
+class FakeTeleopManager:
+    """Minimal TeleopManagerProtocol — only handle_input is exercised."""
+
+    def __init__(self) -> None:
+        self.received: list[tuple[UUID, TeleopEvent]] = []
+        self.fail_next: bool = False
+
+    async def attach(self, entry: TeleopEntry, robot_id: UUID) -> TeleopStatus:
+        return TeleopStatus(attached=True)
+
+    async def detach(self, teleop_id: UUID) -> TeleopStatus:
+        return TeleopStatus()
+
+    async def is_attached(self, teleop_id: UUID) -> bool:
+        return True
+
+    async def get_status(self, teleop_id: UUID) -> TeleopStatus:
+        return TeleopStatus(attached=True)
+
+    async def handle_input(self, teleop_id: UUID, event: TeleopEvent) -> None:
+        if self.fail_next:
+            self.fail_next = False
+            raise RuntimeError("simulated teleop failure")
+        self.received.append((teleop_id, event))
 
 
 class ScriptedSource:
@@ -276,6 +306,92 @@ def test_attach_starts_source_and_close_stops_it():
     started, stopped = _run(scenario())
     assert started is SourceState.RUNNING
     assert stopped is SourceState.STOPPED
+
+
+def test_handle_event_forwards_to_teleop_manager_when_wired():
+    clock = ClockStub()
+    manager = FakeTeleopManager()
+    teleop_id = uuid4()
+    dispatcher = TeleopDispatcher(
+        uuid4(),
+        FakeRobotManager(),
+        ActionValidator(_spec()),
+        DeadmanStateMachine(),
+        clock=clock,
+        teleop_manager=manager,
+        teleop_id=teleop_id,
+    )
+
+    async def scenario() -> None:
+        await dispatcher.handle_event(KeyboardEvent(key="w", pressed=True))
+        await dispatcher.handle_event(KeyboardEvent(key="w", pressed=False))
+        await dispatcher.close()
+
+    _run(scenario())
+    assert [e.key for _, e in manager.received] == ["w", "w"]
+    assert [e.pressed for _, e in manager.received] == [True, False]
+    assert all(tid == teleop_id for tid, _ in manager.received)
+    assert dispatcher.aux_events_forwarded == 2
+    assert dispatcher.aux_events_dropped == 0
+
+
+def test_handle_event_is_noop_without_teleop_manager():
+    dispatcher = TeleopDispatcher(
+        uuid4(),
+        FakeRobotManager(),
+        ActionValidator(_spec()),
+        DeadmanStateMachine(),
+    )
+
+    async def scenario() -> None:
+        await dispatcher.handle_event(KeyboardEvent(key="x", pressed=True))
+        await dispatcher.close()
+
+    _run(scenario())
+    assert dispatcher.aux_events_forwarded == 0
+    assert dispatcher.aux_events_dropped == 1
+
+
+def test_handle_event_drops_on_manager_failure():
+    manager = FakeTeleopManager()
+    manager.fail_next = True
+    dispatcher = TeleopDispatcher(
+        uuid4(),
+        FakeRobotManager(),
+        ActionValidator(_spec()),
+        DeadmanStateMachine(),
+        teleop_manager=manager,
+        teleop_id=uuid4(),
+    )
+
+    async def scenario() -> None:
+        await dispatcher.handle_event(KeyboardEvent(key="w", pressed=True))  # first raises
+        await dispatcher.handle_event(KeyboardEvent(key="w", pressed=False))  # succeeds
+        await dispatcher.close()
+
+    _run(scenario())
+    assert len(manager.received) == 1
+    assert dispatcher.aux_events_forwarded == 1
+    assert dispatcher.aux_events_dropped == 1
+
+
+def test_aux_channel_requires_both_manager_and_id():
+    with pytest.raises(ValueError):
+        TeleopDispatcher(
+            uuid4(),
+            FakeRobotManager(),
+            ActionValidator(_spec()),
+            DeadmanStateMachine(),
+            teleop_manager=FakeTeleopManager(),
+        )
+    with pytest.raises(ValueError):
+        TeleopDispatcher(
+            uuid4(),
+            FakeRobotManager(),
+            ActionValidator(_spec()),
+            DeadmanStateMachine(),
+            teleop_id=uuid4(),
+        )
 
 
 def test_close_is_idempotent_and_blocks_further_attach():
