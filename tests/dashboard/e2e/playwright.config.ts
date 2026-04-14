@@ -10,6 +10,13 @@ const BASE_URL = process.env.DASHBOARD_BASE_URL ?? `http://localhost:${PORT}`;
 const STORAGE_DIR =
   process.env.DASHBOARD_STORAGE_DIR ?? mkdtempSync(join(tmpdir(), "lerobot-dashboard-e2e-"));
 
+// Opt-in hardware smoke mode. Flips the server into fake_devices=0 and lets
+// specs tagged with @hardware exercise real USB/serial hardware. Enable via
+// LEROBOT_DASHBOARD_E2E_HARDWARE=1 (Makefile: `make dashboard-e2e-hardware`).
+const HARDWARE_SMOKE = ["1", "true", "yes", "on"].includes(
+  (process.env.LEROBOT_DASHBOARD_E2E_HARDWARE ?? "").toLowerCase(),
+);
+
 export default defineConfig({
   testDir: "./specs",
   outputDir: "./test-results",
@@ -29,22 +36,34 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
-  projects: [
-    {
-      name: "chromium",
-      use: {
-        ...devices["Desktop Chrome"],
-        viewport: { width: 1440, height: 900 },
-      },
-    },
-  ],
+  projects: HARDWARE_SMOKE
+    ? [
+        {
+          name: "hardware",
+          grep: /@hardware/,
+          use: {
+            ...devices["Desktop Chrome"],
+            viewport: { width: 1440, height: 900 },
+          },
+        },
+      ]
+    : [
+        {
+          name: "chromium",
+          grepInvert: /@hardware/,
+          use: {
+            ...devices["Desktop Chrome"],
+            viewport: { width: 1440, height: 900 },
+          },
+        },
+      ],
   webServer: {
     command: `uv run lerobot-dashboard --host 127.0.0.1 --port ${PORT}`,
     url: `${BASE_URL}/api/health`,
     cwd: "../../../",
     env: {
-      LEROBOT_DASHBOARD_FAKE_DEVICES: "1",
-      LEROBOT_DASHBOARD_FAKE_POLICY: "1",
+      LEROBOT_DASHBOARD_FAKE_DEVICES: HARDWARE_SMOKE ? "0" : "1",
+      LEROBOT_DASHBOARD_FAKE_POLICY: HARDWARE_SMOKE ? "0" : "1",
       LEROBOT_DASHBOARD_STATIC_DIR: "src/lerobot/dashboard/static",
       LEROBOT_DASHBOARD_STORAGE_DIR: STORAGE_DIR,
       PYTHONUNBUFFERED: "1",
