@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.PHONY: tests dashboard-e2e dashboard-e2e-install
+.PHONY: tests dashboard-e2e dashboard-e2e-nobuild dashboard-e2e-install
 
 PYTHON_PATH := $(shell which python)
 
@@ -41,7 +41,16 @@ dashboard-e2e-install: dashboard-frontend
 	@git checkout HEAD -- src/lerobot/dashboard/static/.gitignore src/lerobot/dashboard/static/.gitkeep 2>/dev/null || true
 	cd tests/dashboard/e2e && npm install && npx playwright install --with-deps chromium
 
-dashboard-e2e:
+# Default target: rebuild the Vite bundle before running Playwright so the
+# dashboard server is guaranteed to serve the latest frontend. The static
+# .gitignore/.gitkeep pair is restored after the build (see install target).
+dashboard-e2e: dashboard-frontend
+	@git checkout HEAD -- src/lerobot/dashboard/static/.gitignore src/lerobot/dashboard/static/.gitkeep 2>/dev/null || true
+	cd tests/dashboard/e2e && npm test
+
+# Fast inner-loop variant: skip the Vite rebuild. Use when only spec files
+# or backend code changed; run 'make dashboard-e2e' after any frontend edit.
+dashboard-e2e-nobuild:
 	cd tests/dashboard/e2e && npm test
 
 build-internal:
