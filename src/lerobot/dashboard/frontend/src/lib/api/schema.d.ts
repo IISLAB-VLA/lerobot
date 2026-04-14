@@ -109,6 +109,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/recordings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Recordings */
+        get: operations["list_recordings_api_recordings_get"];
+        put?: never;
+        /** Start Recording */
+        post: operations["start_recording_api_recordings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/recordings/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Recording */
+        get: operations["get_recording_api_recordings__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/recordings/{session_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop Recording */
+        post: operations["stop_recording_api_recordings__session_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/robots": {
         parameters: {
             query?: never;
@@ -856,6 +908,66 @@ export interface components {
             width: number | null;
         };
         /**
+         * RecordingSession
+         * @description Lightweight view of a recording session for HTTP responses.
+         */
+        RecordingSession: {
+            /** Dataset Name */
+            dataset_name: string;
+            /** Dataset Path */
+            dataset_path: string;
+            /**
+             * Disk Bytes
+             * @default 0
+             */
+            disk_bytes: number;
+            /**
+             * Drop Count
+             * @default 0
+             */
+            drop_count: number;
+            /** Episode Index */
+            episode_index?: number | null;
+            /** Error */
+            error?: string | null;
+            /** Fps */
+            fps: number;
+            /**
+             * Frames Captured
+             * @default 0
+             */
+            frames_captured: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Robot Id
+             * Format: uuid
+             */
+            robot_id: string;
+            /**
+             * Saved
+             * @default false
+             */
+            saved: boolean;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "starting" | "recording" | "stopping" | "saved" | "discarded" | "failed";
+            /** Stopped At */
+            stopped_at?: string | null;
+            /** Task Description */
+            task_description: string;
+        };
+        /**
          * RobotCreateRequest
          * @description Shape accepted by ``POST /api/robots``.
          *
@@ -993,6 +1105,28 @@ export interface components {
             vid?: string | null;
         };
         /**
+         * StartRequest
+         * @description Payload accepted by :meth:`RecorderService.start`.
+         */
+        StartRequest: {
+            /** Dataset Name */
+            dataset_name: string;
+            /** Fps */
+            fps: number;
+            /**
+             * Robot Id
+             * Format: uuid
+             */
+            robot_id: string;
+            /** Task Description */
+            task_description: string;
+            /**
+             * Use Videos
+             * @default true
+             */
+            use_videos: boolean;
+        };
+        /**
          * StatsManyResponse
          * @description Batch response for the multi-session stats overlay.
          *
@@ -1013,6 +1147,15 @@ export interface components {
             }[];
             /** Session Id */
             session_id: string;
+        };
+        /** StopRequest */
+        StopRequest: {
+            /**
+             * Save
+             * @description Finalize the dataset (True) or discard buffered frames (False).
+             * @default true
+             */
+            save: boolean;
         };
         /** TeleopCreateRequest */
         TeleopCreateRequest: {
@@ -1311,6 +1454,125 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    list_recordings_api_recordings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingSession"][];
+                };
+            };
+        };
+    };
+    start_recording_api_recordings_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingSession"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_recording_api_recordings__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingSession"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_recording_api_recordings__session_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StopRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingSession"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
