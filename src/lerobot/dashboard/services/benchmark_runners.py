@@ -25,6 +25,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from lerobot.dashboard.services.benchmark import BENCHMARK_RESOURCE_URL_PREFIX
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:  # pragma: no cover — import deferred until rollout time
@@ -370,6 +372,9 @@ class RandomActionEnvRunner:
                 }
                 if obs_jpg_path is not None:
                     step_event["obs_jpg_path"] = obs_jpg_path
+                    step_event["obs_jpg_url"] = (
+                        f"{BENCHMARK_RESOURCE_URL_PREFIX}/{run.run_id}/{obs_jpg_path}"
+                    )
                 await publish(run, step_event)
 
                 if terminated_scalar or truncated_scalar:

@@ -237,9 +237,10 @@ async def test_runner_writes_observation_jpgs_when_obs_contains_image(tmp_path: 
         seed=7,
         storage_dir=tmp_path,
     )
+    captured: list[dict] = []
 
     async def publish(_run: _RunShim, event: dict) -> None:
-        pass
+        captured.append(event)
 
     runner = RandomActionEnvRunner(env_factory=_factory, max_steps_per_episode=10)
     await runner(run, publish)
@@ -253,6 +254,13 @@ async def test_runner_writes_observation_jpgs_when_obs_contains_image(tmp_path: 
         # File should be a JPG header (FFD8FF).
         head = (tmp_path / rel).read_bytes()[:3]
         assert head == b"\xff\xd8\xff"
+
+    # WS step events carry a ready-to-use absolute URL alongside the parquet path.
+    step_events = [e for e in captured if e["type"] == "step"]
+    assert all("obs_jpg_url" in e for e in step_events)
+    assert step_events[0]["obs_jpg_url"] == (
+        "/resources/benchmarks/run-img/observations/episode_0/step_0.jpg"
+    )
 
 
 async def test_runner_obs_jpg_path_null_when_no_image_in_obs(tmp_path: Path) -> None:
