@@ -4,6 +4,7 @@ import { HomePage } from "@/routes/Home";
 import { RobotsPage } from "@/routes/Robots";
 import { RobotDetailPage } from "@/routes/RobotDetail";
 import { RobotCalibratePage } from "@/routes/RobotCalibrate";
+import { RobotInferencePage } from "@/routes/RobotInference";
 import { BenchmarksPage } from "@/routes/Benchmarks";
 import { NotFoundPage } from "@/routes/NotFound";
 import { useTheme } from "@/hooks/useTheme";
@@ -17,6 +18,7 @@ export default function App(): JSX.Element {
         <Route path="robots" element={<RobotsPage />} />
         <Route path="robots/:id" element={<RobotDetailPage />} />
         <Route path="robots/:id/calibrate" element={<RobotCalibratePage />} />
+        <Route path="robots/:id/inference" element={<RobotInferencePage />} />
         <Route path="benchmarks/*" element={<BenchmarksPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
