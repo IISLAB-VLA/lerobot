@@ -142,7 +142,11 @@ export function useCalibrationSession({
               clearInterval(heartbeatRef.current);
               heartbeatRef.current = null;
             }
-            if (phaseRef.current === "done" || phaseRef.current === "idle") return;
+            if (
+              phaseRef.current === "done" ||
+              phaseRef.current === "idle" ||
+              phaseRef.current === "error"
+            ) return;
 
             const attempt = reconnectAttemptRef.current;
             const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attempt);
