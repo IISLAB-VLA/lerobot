@@ -225,6 +225,29 @@ def test_delete_camera_blocked_while_referenced(client: TestClient) -> None:
     assert resp.status_code == 422
 
 
+def test_camera_lifecycle_open_status_close(client: TestClient) -> None:
+    cam = client.post("/api/cameras", json=_camera_payload()).json()
+    initial = client.get(f"/api/cameras/{cam['id']}/status").json()
+    assert initial["online"] is False
+
+    opened = client.post(f"/api/cameras/{cam['id']}/open").json()
+    assert opened["online"] is True
+    assert opened["opened_at"] is not None
+
+    fetched = client.get(f"/api/cameras/{cam['id']}/status").json()
+    assert fetched["online"] is True
+
+    closed = client.post(f"/api/cameras/{cam['id']}/close").json()
+    assert closed["online"] is False
+
+
+def test_camera_lifecycle_404_for_unknown_camera(client: TestClient) -> None:
+    ghost = uuid4()
+    assert client.post(f"/api/cameras/{ghost}/open").status_code == 404
+    assert client.post(f"/api/cameras/{ghost}/close").status_code == 404
+    assert client.get(f"/api/cameras/{ghost}/status").status_code == 404
+
+
 def test_camera_patch_invalid_fails(client: TestClient) -> None:
     camera = client.post("/api/cameras", json=_camera_payload()).json()
     resp = client.patch(f"/api/cameras/{camera['id']}", json={"fps": -5})
