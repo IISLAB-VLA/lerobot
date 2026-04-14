@@ -625,10 +625,232 @@ class PolicyDispatchRunner:
             await runner(run, publish)
 
 
+# ---------------------------------------------------------------------------
+# Robot-in-the-loop runner (Phase 2b follow-up stub)
+# ---------------------------------------------------------------------------
+
+
+class RobotEnvRunner:
+    """Benchmark runner that drives a live robot instead of a gym env.
+
+    Replaces the gym ``vec_env.step`` loop with
+    :meth:`RobotManagerProtocol.get_observation` /
+    :meth:`~RobotManagerProtocol.send_action` calls so the benchmark
+    pipeline can exercise real hardware without a gym dependency.
+
+    Episode semantics differ from :class:`RandomActionEnvRunner`:
+
+    * There is no ``reset()`` — the robot starts from its current physical
+      state.
+    * ``reward`` is always ``0.0`` (robots don't return a scalar reward).
+    * An episode ends after ``max_steps_per_episode`` steps or when
+      ``run.cancelled`` is set.
+
+    This class is intentionally minimal — a pilot to verify the benchmark
+    recording pipeline end-to-end on hardware.  REST/WS API changes and
+    automatic runner selection are out of scope until QA E2E specs land.
+
+    Parameters
+    ----------
+    robot_id:
+        Key used to look up the robot in ``robot_manager``.
+    robot_manager:
+        Any object implementing ``get_observation(robot_id)`` →
+        ``dict[str, Any]`` and ``send_action(robot_id, action)`` →
+        ``None``.  Matches :class:`~lerobot.dashboard.services.robot_manager.RobotManagerProtocol`.
+    policy_cache:
+        Optional :class:`~lerobot.dashboard.services.policy_loader.PolicyCache`.
+        When provided together with ``repo_id`` the runner uses
+        ``policy.select_action`` instead of random perturbations.
+    repo_id:
+        HuggingFace repo ID for the policy to load, e.g.
+        ``"lerobot/smolvla_base"``.
+    max_steps_per_episode:
+        Hard limit on steps per episode (primary termination condition).
+    device:
+        PyTorch device string for policy inference.
+    """
+
+    POLICY_SLUG = "robot_random"
+
+    def __init__(
+        self,
+        robot_id: str,
+        robot_manager: Any,
+        policy_cache: Any | None = None,
+        repo_id: str | None = None,
+        max_steps_per_episode: int = 100,
+        device: str = "cpu",
+    ) -> None:
+        self._robot_id = robot_id
+        self._robot_manager = robot_manager
+        self._policy_cache = policy_cache
+        self._repo_id = repo_id
+        self._max_steps = max_steps_per_episode
+        self._device = device
+        if repo_id is not None:
+            self.POLICY_SLUG = repo_id.split("/")[-1]
+        self._policy: Any = None
+
+    async def __call__(self, run: Any, publish: Any) -> None:
+        if self._repo_id is not None and self._policy_cache is not None:
+            self._policy = await self._policy_cache.get(self._repo_id)
+            if hasattr(self._policy, "eval"):
+                self._policy.eval()
+
+        obs = await asyncio.to_thread(self._robot_manager.get_observation, self._robot_id)
+        if not obs:
+            raise RuntimeError(
+                f"robot {self._robot_id!r} returned empty observation — "
+                "is the robot connected and calibrated?"
+            )
+
+        # Derive action_keys from observation keys (position-control convention:
+        # action dim mirrors state dim for the random baseline).
+        action_keys = sorted(str(k) for k in obs.keys() if not str(k).startswith("camera"))
+
+        writer = TrajectoryWriter(
+            path=Path(run.storage_dir) / "trajectory.parquet",
+            run_id=run.run_id,
+            action_keys=action_keys,
+        )
+        try:
+            await self._rollout(run, obs, action_keys, writer, publish)
+        finally:
+            await writer.close()
+
+    async def _rollout(
+        self,
+        run: Any,
+        initial_obs: Any,
+        action_keys: list[str],
+        writer: TrajectoryWriter,
+        publish: Any,
+    ) -> None:
+        import numpy as np
+
+        storage_dir = Path(run.storage_dir)
+        obs = initial_obs
+
+        for episode in range(run.episodes):
+            if run.cancelled:
+                return
+            run.current_episode = episode
+
+            for step in range(self._max_steps):
+                if run.cancelled:
+                    return
+
+                action_dict = await asyncio.to_thread(self._choose_action, obs, action_keys)
+                await asyncio.to_thread(
+                    self._robot_manager.send_action, self._robot_id, action_dict
+                )
+                obs = await asyncio.to_thread(
+                    self._robot_manager.get_observation, self._robot_id
+                )
+
+                done = step == self._max_steps - 1
+                action_flat = [float(action_dict.get(k, 0.0)) for k in action_keys]
+
+                obs_jpg_path = await self._save_obs_jpg(storage_dir, episode, step, obs)
+
+                await writer.append(
+                    policy_slug=self.POLICY_SLUG,
+                    episode=episode,
+                    step=step,
+                    reward=0.0,
+                    done=done,
+                    truncated=False,
+                    action=action_flat,
+                    obs_jpg_path=obs_jpg_path,
+                )
+                run.steps_total = writer.row_count
+                run.last_reward = None  # robots don't emit reward
+
+                step_event: dict[str, Any] = {
+                    "type": "step",
+                    "episode": episode,
+                    "step": step,
+                    "reward": 0.0,
+                    "done": done,
+                    "truncated": False,
+                    "policy_slug": self.POLICY_SLUG,
+                    "progress": (episode + (step + 1) / self._max_steps) / max(run.episodes, 1),
+                }
+                if obs_jpg_path is not None:
+                    step_event["obs_jpg_path"] = obs_jpg_path
+                    step_event["obs_jpg_url"] = (
+                        f"{BENCHMARK_RESOURCE_URL_PREFIX}/{run.run_id}/{obs_jpg_path}"
+                    )
+                await publish(run, step_event)
+
+            run.progress = (episode + 1) / max(run.episodes, 1)
+            await self._finalize_preview(run, episode, publish)
+
+    def _choose_action(self, obs: Any, action_keys: list[str]) -> dict[str, float]:
+        """Return an action dict for the robot.
+
+        * With policy: runs ``policy.select_action`` and maps the output
+          tensor to ``action_keys``.
+        * Without policy: holds the current position (action == observation).
+          This is safe for testing — the robot stays still.
+        """
+        if self._policy is not None:
+            import torch
+
+            obs_dict = _obs_to_policy_input(obs, self._device)
+            with torch.no_grad():
+                action_tensor = self._policy.select_action(obs_dict)
+            flat = action_tensor.cpu().numpy().flatten().tolist()
+            return {k: float(v) for k, v in zip(action_keys, flat)}
+
+        # Hold current position (zeros if key missing).
+        return {k: float(obs.get(k, 0.0)) if isinstance(obs.get(k), (int, float)) else 0.0
+                for k in action_keys}
+
+    async def _save_obs_jpg(
+        self, storage_dir: Path, episode: int, step: int, obs: Any
+    ) -> str | None:
+        image = _extract_image(obs)
+        if image is None:
+            return None
+        rel_path = f"observations/episode_{episode}/step_{step}.jpg"
+        await asyncio.to_thread(_save_jpeg, image, storage_dir / rel_path)
+        return rel_path
+
+    async def _finalize_preview(self, run: Any, episode: int, publish: Any) -> None:
+        storage_dir = Path(run.storage_dir)
+        episode_dir = storage_dir / "observations" / f"episode_{episode}"
+        if not episode_dir.is_dir():
+            return
+        jpg_paths = sorted(episode_dir.glob("step_*.jpg"))
+        if not jpg_paths:
+            return
+        fps = max(int(getattr(run, "fps", 0)) or 10, 1)
+        rel_path = f"previews/episode_{episode}.mp4"
+        dest = storage_dir / rel_path
+        try:
+            await asyncio.to_thread(_encode_episode_to_mp4, jpg_paths, dest, fps)
+        except Exception:
+            logger.exception("preview encoding failed for run %s episode %s", run.run_id, episode)
+            return
+        await publish(
+            run,
+            {
+                "type": "preview_ready",
+                "episode": episode,
+                "policy_slug": self.POLICY_SLUG,
+                "preview_path": rel_path,
+                "preview_url": f"{BENCHMARK_RESOURCE_URL_PREFIX}/{run.run_id}/{rel_path}",
+            },
+        )
+
+
 __all__ = [
     "OBS_JPG_QUALITY",
     "PolicyDispatchRunner",
     "PolicyEnvRunner",
     "RandomActionEnvRunner",
+    "RobotEnvRunner",
     "TrajectoryWriter",
 ]
