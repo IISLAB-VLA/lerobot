@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from lerobot.dashboard.api import cameras, health, robots, teleops
+from lerobot.dashboard.streaming import build_streams_router
 
 
 def build_api_router() -> APIRouter:
@@ -14,4 +15,5 @@ def build_api_router() -> APIRouter:
     router.include_router(robots.router)
     router.include_router(cameras.router)
     router.include_router(teleops.router)
+    router.include_router(build_streams_router())
     return router

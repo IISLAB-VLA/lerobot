@@ -17,6 +17,7 @@ from lerobot.dashboard.core.state import AppState
 from lerobot.dashboard.services.registry import Registry, registry_path_for
 from lerobot.dashboard.services.robot_manager import InMemoryRobotManager
 from lerobot.dashboard.storage.paths import ensure_storage_dir
+from lerobot.dashboard.streaming import SignalingManager, StubFrameSourceProvider
 from lerobot.dashboard.ws.router import build_ws_router
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,10 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
     state = AppState(config=resolved)
     state.registry = Registry(registry_path_for(resolved.storage_dir))
     state.robot_manager = InMemoryRobotManager()
+    # Until the Task #6 camera adapter lands the streaming stack is fed by a
+    # synthetic frame source. The real provider wraps the registry's
+    # CameraEntry objects and is swapped in without touching the router.
+    state.streaming = SignalingManager(StubFrameSourceProvider())
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -82,6 +87,8 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             yield
         finally:
             logger.info("dashboard shutting down")
+            if state.streaming is not None:
+                await state.streaming.close_all()
 
     app = FastAPI(
         title="LeRobot Dashboard",
@@ -89,6 +96,9 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.dashboard = state
+    # The streaming router reads the manager directly off ``app.state.streaming``;
+    # mirror it so we don't leak the AppState indirection into that package.
+    app.state.streaming = state.streaming
 
     app.add_middleware(
         CORSMiddleware,
