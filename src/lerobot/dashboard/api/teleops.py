@@ -40,9 +40,7 @@ async def create_teleop(
 
 
 @router.get("/{teleop_id}", response_model=TeleopEntry)
-async def get_teleop(
-    teleop_id: UUID, registry: Registry = Depends(get_registry)
-) -> TeleopEntry:
+async def get_teleop(teleop_id: UUID, registry: Registry = Depends(get_registry)) -> TeleopEntry:
     try:
         return await registry.get_teleop(teleop_id)
     except RegistryError as exc:
@@ -62,9 +60,7 @@ async def update_teleop(
 
 
 @router.delete("/{teleop_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_teleop(
-    teleop_id: UUID, registry: Registry = Depends(get_registry)
-) -> None:
+async def delete_teleop(teleop_id: UUID, registry: Registry = Depends(get_registry)) -> None:
     try:
         await registry.delete_teleop(teleop_id)
     except RegistryError as exc:

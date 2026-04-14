@@ -128,9 +128,7 @@ def test_teleop_crud(client: TestClient) -> None:
     assert create.status_code == 201
     teleop = create.json()
 
-    patched = client.patch(
-        f"/api/teleops/{teleop['id']}", json={"name": "gamepad-1", "kind": "gamepad"}
-    )
+    patched = client.patch(f"/api/teleops/{teleop['id']}", json={"name": "gamepad-1", "kind": "gamepad"})
     assert patched.status_code == 200
     assert patched.json()["kind"] == "gamepad"
 

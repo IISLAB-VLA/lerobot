@@ -24,8 +24,8 @@ class AppState:
 
     config: DashboardConfig
     startup_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    registry: "Registry | None" = None
-    robot_manager: "RobotManagerProtocol | None" = None
-    streaming: "SignalingManager | None" = None
+    registry: Registry | None = None
+    robot_manager: RobotManagerProtocol | None = None
+    streaming: SignalingManager | None = None
     live_cameras: dict[str, Any] = field(default_factory=dict)
     live_teleops: dict[str, Any] = field(default_factory=dict)

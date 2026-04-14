@@ -48,9 +48,7 @@ async def create_camera(
 
 
 @router.get("/{camera_id}", response_model=CameraEntry)
-async def get_camera(
-    camera_id: UUID, registry: Registry = Depends(get_registry)
-) -> CameraEntry:
+async def get_camera(camera_id: UUID, registry: Registry = Depends(get_registry)) -> CameraEntry:
     try:
         return await registry.get_camera(camera_id)
     except RegistryError as exc:
@@ -70,9 +68,7 @@ async def update_camera(
 
 
 @router.delete("/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_camera(
-    camera_id: UUID, registry: Registry = Depends(get_registry)
-) -> None:
+async def delete_camera(camera_id: UUID, registry: Registry = Depends(get_registry)) -> None:
     try:
         await registry.delete_camera(camera_id)
     except RegistryError as exc:

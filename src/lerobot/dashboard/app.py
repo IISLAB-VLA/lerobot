@@ -118,8 +118,6 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             name="frontend",
         )
     elif resolved.static_dir is not None:
-        logger.warning(
-            "static_dir %s does not exist; skipping frontend mount", resolved.static_dir
-        )
+        logger.warning("static_dir %s does not exist; skipping frontend mount", resolved.static_dir)
 
     return app

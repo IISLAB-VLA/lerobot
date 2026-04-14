@@ -151,15 +151,11 @@ class Registry:
 
     async def get_camera(self, camera_id: UUID) -> CameraEntry:
         async with self._lock:
-            return self._find(self._ensure_loaded().cameras, camera_id, "camera").model_copy(
-                deep=True
-            )
+            return self._find(self._ensure_loaded().cameras, camera_id, "camera").model_copy(deep=True)
 
     async def get_teleop(self, teleop_id: UUID) -> TeleopEntry:
         async with self._lock:
-            return self._find(self._ensure_loaded().teleops, teleop_id, "teleop").model_copy(
-                deep=True
-            )
+            return self._find(self._ensure_loaded().teleops, teleop_id, "teleop").model_copy(deep=True)
 
     # ------------------------------------------------------------------
     # Create / patch / delete — robots
@@ -226,9 +222,7 @@ class Registry:
             referrers = [r for r in doc.robots if target.id in r.cameras]
             if referrers:
                 names = ", ".join(f"{r.name}({r.id})" for r in referrers)
-                raise RegistryValidationError(
-                    f"camera {camera_id} is still referenced by robots: {names}"
-                )
+                raise RegistryValidationError(f"camera {camera_id} is still referenced by robots: {names}")
             doc.cameras.remove(target)
             await self._persist()
 
@@ -263,9 +257,7 @@ class Registry:
             referrers = [r for r in doc.robots if r.teleop == target.id]
             if referrers:
                 names = ", ".join(f"{r.name}({r.id})" for r in referrers)
-                raise RegistryValidationError(
-                    f"teleop {teleop_id} is still referenced by robots: {names}"
-                )
+                raise RegistryValidationError(f"teleop {teleop_id} is still referenced by robots: {names}")
             doc.teleops.remove(target)
             await self._persist()
 
@@ -297,12 +289,10 @@ class Registry:
         if entry.teleop is not None:
             teleop_ids = {t.id for t in doc.teleops}
             if entry.teleop not in teleop_ids:
-                raise RegistryValidationError(
-                    f"robot references unknown teleop: {entry.teleop}"
-                )
+                raise RegistryValidationError(f"robot references unknown teleop: {entry.teleop}")
 
 
-def _apply_patch(current: T, patch: dict[str, object]) -> T:
+def _apply_patch[T: (RobotEntry, CameraEntry, TeleopEntry)](current: T, patch: dict[str, object]) -> T:
     """Return a new model instance with ``patch`` merged over ``current``.
 
     Pydantic v2 ``model_copy(update=...)`` doesn't re-run validators on the

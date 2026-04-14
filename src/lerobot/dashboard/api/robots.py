@@ -61,9 +61,7 @@ async def create_robot(
 
 
 @router.get("/{robot_id}", response_model=RobotEntry)
-async def get_robot(
-    robot_id: UUID, registry: Registry = Depends(get_registry)
-) -> RobotEntry:
+async def get_robot(robot_id: UUID, registry: Registry = Depends(get_registry)) -> RobotEntry:
     try:
         return await registry.get_robot(robot_id)
     except RegistryError as exc:
