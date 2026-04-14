@@ -246,6 +246,8 @@ export function RobotInferencePage(): JSX.Element {
       <div className="grid gap-4 md:grid-cols-[2fr_3fr]">
         <ConfigPanel
           policies={policies}
+          loadingPolicies={policiesQuery.isLoading}
+          errorPolicies={policiesQuery.isError}
           repoId={repoId}
           setRepoId={setRepoId}
           selectedPolicy={selectedPolicy}
@@ -290,6 +292,8 @@ function subscriptionTerminal(session: InferenceSession): boolean {
 
 interface ConfigPanelProps {
   policies: PolicyDescriptor[];
+  loadingPolicies: boolean;
+  errorPolicies: boolean;
   repoId: string;
   setRepoId: (v: string) => void;
   selectedPolicy: PolicyDescriptor | null;
@@ -312,6 +316,8 @@ interface ConfigPanelProps {
 
 function ConfigPanel({
   policies,
+  loadingPolicies,
+  errorPolicies,
   repoId,
   setRepoId,
   selectedPolicy,
@@ -341,7 +347,16 @@ function ConfigPanel({
     <section className="flex flex-col gap-4 rounded-md border bg-card p-4">
       <div className="grid gap-2">
         <Label htmlFor="policy">Policy</Label>
-        {policies.length > 0 ? (
+        {loadingPolicies ? (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            Scanning HF cache…
+          </p>
+        ) : errorPolicies ? (
+          <p role="alert" className="text-xs text-destructive">
+            Failed to load policy list. Check that the backend is reachable.
+          </p>
+        ) : policies.length > 0 ? (
           <Select id="policy" value={repoId} onChange={(e) => setRepoId(e.target.value)}>
             {policies.map((p) => (
               <option key={p.repo_id} value={p.repo_id}>
