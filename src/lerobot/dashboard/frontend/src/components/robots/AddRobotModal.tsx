@@ -455,11 +455,18 @@ function Step2Network({ state, setState }: Step2NetworkProps): JSX.Element {
       setProbeState({ kind: "fail", error: "Port must be 1–65535" });
       return;
     }
-    const result = await probeNetwork({ protocol: state.protocol, host: state.host, port });
-    if (result.ok) {
-      setProbeState({ kind: "ok", latencyMs: result.latency_ms });
-    } else {
-      setProbeState({ kind: "fail", error: result.error ?? "Probe failed" });
+    try {
+      const result = await probeNetwork({ protocol: state.protocol, host: state.host, port });
+      if (result.ok) {
+        setProbeState({ kind: "ok", latencyMs: result.latency_ms });
+      } else {
+        setProbeState({ kind: "fail", error: result.error ?? "Probe failed" });
+      }
+    } catch (err) {
+      setProbeState({
+        kind: "fail",
+        error: err instanceof Error ? err.message : "Probe failed",
+      });
     }
   }
 
