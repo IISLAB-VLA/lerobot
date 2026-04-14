@@ -17,12 +17,16 @@ from lerobot.dashboard.core.state import AppState
 from lerobot.dashboard.services.assets import RESOURCE_URL_PREFIX, AssetManager
 from lerobot.dashboard.services.calibration import CalibrationController
 from lerobot.dashboard.services.camera_manager import InMemoryCameraManager, LerobotCameraManager
+from lerobot.dashboard.services.recorder import RecorderService
 from lerobot.dashboard.services.registry import Registry, registry_path_for
 from lerobot.dashboard.services.robot_manager import InMemoryRobotManager
 from lerobot.dashboard.services.robot_manager_impl import LerobotRobotManager
 from lerobot.dashboard.services.teleop_manager import InMemoryTeleopManager
 from lerobot.dashboard.storage.paths import ensure_storage_dir
-from lerobot.dashboard.streaming import SignalingManager, StubFrameSourceProvider
+from lerobot.dashboard.streaming import (
+    RegistryFrameSourceProvider,
+    SignalingManager,
+)
 from lerobot.dashboard.ws.router import build_ws_router
 
 logger = logging.getLogger(__name__)
@@ -79,10 +83,22 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         state.camera_manager = LerobotCameraManager()
     state.teleop_manager = InMemoryTeleopManager()
     state.calibration = CalibrationController()
-    # Until the Task #6 camera adapter lands the streaming stack is fed by a
-    # synthetic frame source. The real provider wraps the camera_manager's
-    # ``subscribe()`` iterator and is swapped in without touching the router.
-    state.streaming = SignalingManager(StubFrameSourceProvider())
+    # Streaming bridges the camera_manager's ``subscribe()`` into the
+    # WebRTC track. In ``fake_devices`` mode ``state.camera_manager`` is
+    # the in-memory fallback so the wiring still succeeds — frames are
+    # just zero-filled placeholders instead of real captures.
+    state.streaming = SignalingManager(
+        RegistryFrameSourceProvider(
+            manager=state.camera_manager,
+            registry=state.registry,
+        )
+    )
+    state.recorder = RecorderService(
+        registry=state.registry,
+        robot_manager=state.robot_manager,
+        camera_manager=state.camera_manager,
+        datasets_dir=resolved.resolved_dataset_dir(),
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -100,6 +116,8 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             yield
         finally:
             logger.info("dashboard shutting down")
+            if state.recorder is not None:
+                await state.recorder.close()
             if state.streaming is not None:
                 await state.streaming.close_all()
 

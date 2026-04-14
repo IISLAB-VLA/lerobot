@@ -308,6 +308,17 @@ class LerobotRobotManager:
             return {}
         return dict(obs)
 
+    async def get_features(self, robot_id: UUID) -> dict[str, dict]:
+        async with self._lock:
+            slot = self._slots.get(robot_id)
+            if slot is None or slot.robot is None:
+                return {"observation": {}, "action": {}}
+            robot = slot.robot
+        return {
+            "observation": dict(getattr(robot, "observation_features", {}) or {}),
+            "action": dict(getattr(robot, "action_features", {}) or {}),
+        }
+
 
 # Runtime protocol check — catch signature drift early.
 assert isinstance(LerobotRobotManager(), RobotManagerProtocol)

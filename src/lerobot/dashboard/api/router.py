@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from lerobot.dashboard.api import calibration, cameras, devices, health, robots, teleops
+from lerobot.dashboard.api import cameras, devices, health, robots, teleops
+from lerobot.dashboard.api import calibration  # noqa: I001 — must come after others to avoid teleop circular import
 from lerobot.dashboard.streaming import build_streams_router
 
 

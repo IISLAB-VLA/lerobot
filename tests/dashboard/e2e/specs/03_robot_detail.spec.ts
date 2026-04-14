@@ -99,6 +99,47 @@ test.describe("Robot detail", () => {
     await expect(toggle).toHaveText(/Pause streams/);
   });
 
+  test("number keys switch layout when tile count allows", async ({ page, request }) => {
+    const { robotId } = await seedRobot(request, "Keybind Bot", 2);
+    await gotoDetail(page, robotId);
+
+    const switcher = page.getByRole("toolbar", { name: /Stream layout/i });
+    const single = switcher.getByRole("button", { name: "Single" });
+    const grid = switcher.getByRole("button", { name: "Grid" });
+    const spotlight = switcher.getByRole("button", { name: "Spotlight" });
+
+    // Initial: Single is selected.
+    await expect(single).toHaveAttribute("aria-pressed", "true");
+
+    await page.keyboard.press("4");
+    await expect(grid).toHaveAttribute("aria-pressed", "true");
+    await expect(single).toHaveAttribute("aria-pressed", "false");
+
+    await page.keyboard.press("5");
+    await expect(spotlight).toHaveAttribute("aria-pressed", "true");
+    await expect(grid).toHaveAttribute("aria-pressed", "false");
+
+    await page.keyboard.press("1");
+    await expect(single).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("number key for a layout exceeding tile count is a no-op", async ({ page, request }) => {
+    const { robotId } = await seedRobot(request, "Solo Cam Bot", 1);
+    await gotoDetail(page, robotId);
+
+    const switcher = page.getByRole("toolbar", { name: /Stream layout/i });
+    const single = switcher.getByRole("button", { name: "Single" });
+    const grid = switcher.getByRole("button", { name: "Grid" });
+
+    await expect(single).toHaveAttribute("aria-pressed", "true");
+    await expect(grid).toBeDisabled();
+
+    await page.keyboard.press("4");
+    // Grid requires 2 tiles; stays on Single.
+    await expect(single).toHaveAttribute("aria-pressed", "true");
+    await expect(grid).toHaveAttribute("aria-pressed", "false");
+  });
+
   test("robot with no cameras shows empty state and multi-tile layouts disabled", async ({
     page,
     request,
