@@ -172,10 +172,22 @@ PolicyLoader = Callable[[str], Any]
 
 
 def _default_policy_loader(repo_id: str) -> Any:  # pragma: no cover — touches HF cache
-    """Thread-safe ``PreTrainedPolicy.from_pretrained(repo_id)`` wrapper."""
-    from lerobot.policies.pretrained import PreTrainedPolicy
+    """Thread-safe policy loader that resolves the concrete class from the cache.
 
-    return PreTrainedPolicy.from_pretrained(repo_id)
+    ``PreTrainedPolicy.from_pretrained`` cannot be called on the abstract
+    base class directly — it would try to instantiate the abstract class.
+    Instead we:
+    1. Load the config (draccus parses ``config.json`` and returns the
+       concrete sub-config, e.g. ``SmolVLAConfig``).
+    2. Resolve the concrete policy class via ``get_policy_class(config.type)``.
+    3. Load weights via ``cls.from_pretrained(repo_id, config=config)``.
+    """
+    from lerobot.configs.policies import PreTrainedConfig
+    from lerobot.policies.factory import get_policy_class
+
+    config = PreTrainedConfig.from_pretrained(repo_id)
+    cls = get_policy_class(config.type)
+    return cls.from_pretrained(repo_id, config=config)
 
 
 def scan_hf_cache(cache_dir: Path | None = None) -> list[PolicyDescriptor]:
@@ -319,6 +331,8 @@ class _Session:
     cameras: list[CameraEntry] = field(default_factory=list)
     camera_iters: dict[UUID, AsyncIterator[Any]] = field(default_factory=dict)
     policy: Any = None
+    preprocessor: Any = None  # PolicyProcessorPipeline | None
+    postprocessor: Any = None  # PolicyProcessorPipeline | None
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +443,13 @@ class InferenceService:
                 await self._robot_manager.get_features(req.robot_id),
             )
             await self._open_camera_subscribers(session)
+            # Load pre/post-processor pipelines so real policies (e.g. smolvla)
+            # receive properly converted tensors + language tokens at each step.
+            # Falls back to (None, None) for stubs and policies without saved
+            # processor configs — those use the direct select_action path.
+            session.preprocessor, session.postprocessor = await self._load_processors(
+                req.repo_id, session.policy
+            )
         except InferenceError:
             # Typed errors (validation / conflict / not-found) already map
             # to the right HTTP status — propagate them without wrapping,
@@ -565,10 +586,16 @@ class InferenceService:
     async def _step_once(self, session: _Session) -> bool:
         """One observation + policy.select_action + optional send_action."""
         try:
-            obs = await self._robot_manager.read_observation(session.model.robot_id)
+            obs_raw = await self._robot_manager.read_observation(session.model.robot_id)
         except Exception as exc:
             logger.warning("read_observation failed: %s", exc)
             return True
+
+        # Strip metadata keys that are not numpy arrays (e.g. ``robot_id``,
+        # ``online``, ``timestamp`` produced by InMemoryRobotManager).
+        # ``prepare_observation_for_inference`` calls ``torch.from_numpy`` on
+        # every value, so non-array entries would raise a TypeError.
+        obs: dict[str, np.ndarray] = {k: v for k, v in obs_raw.items() if isinstance(v, np.ndarray)}
 
         stall_timeout = max((1.0 / session.model.fps) * 3, 0.25)
         images: dict[str, np.ndarray] = {}
@@ -594,7 +621,12 @@ class InferenceService:
         try:
             async with self._policy_exec_lock:
                 action_tensor = await asyncio.to_thread(
-                    _run_policy, policy, obs, session.model.task_description
+                    _run_policy,
+                    policy,
+                    obs,
+                    session.model.task_description,
+                    session.preprocessor,
+                    session.postprocessor,
                 )
         except Exception as exc:
             logger.warning("policy.select_action failed: %s", exc)
@@ -691,6 +723,28 @@ class InferenceService:
                 await iterator.aclose()  # type: ignore[attr-defined]
             session.camera_iters.pop(cam_id, None)
 
+    async def _load_processors(self, repo_id: str, policy: Any) -> tuple[Any, Any]:
+        """Load pre/post-processor pipelines for ``repo_id``.
+
+        Uses ``make_pre_post_processors`` (loaded lazily to avoid importing
+        the full lerobot policy stack at module import time). Falls back to
+        ``(None, None)`` when the policy is a test stub (no ``.config``), the
+        processor config is not found, or any other error occurs. Those
+        sessions use the direct ``select_action`` path in ``_run_policy``.
+        """
+        config = getattr(policy, "config", None)
+        if config is None:
+            return None, None
+        try:
+            from lerobot.policies.factory import make_pre_post_processors
+
+            preprocessor, postprocessor = await asyncio.to_thread(make_pre_post_processors, config, repo_id)
+            logger.debug("processor pipeline loaded for %s", repo_id)
+            return preprocessor, postprocessor
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("processor pipeline not available for %s: %s", repo_id, exc)
+            return None, None
+
     async def _emit(self, session: _Session, event: StepEvent) -> None:
         async with session.lock:
             queues = list(session.subscribers)
@@ -704,12 +758,46 @@ class InferenceService:
 # ---------------------------------------------------------------------------
 
 
-def _run_policy(policy: Any, obs: dict[str, Any], task_description: str) -> Any:
+def _run_policy(
+    policy: Any,
+    obs: dict[str, np.ndarray],
+    task_description: str,
+    preprocessor: Any = None,
+    postprocessor: Any = None,
+) -> Any:
     """Call ``policy.select_action`` safely. Runs on a worker thread.
 
-    Tries to pass ``task`` when the policy advertises language support; falls
-    back to a no-kwarg call for classic policies (act, diffusion, ...).
+    When *preprocessor* and *postprocessor* are provided (loaded via
+    ``make_pre_post_processors``), delegates to :func:`predict_action` from
+    ``lerobot.common.control_utils``.  That helper converts raw numpy arrays
+    to PyTorch tensors, runs the processor pipeline (normalisation, language
+    tokenisation, device placement), calls ``select_action``, and
+    unnormalises the action.
+
+    Without processors (test stubs, policies without a saved processor
+    config), falls through to a bare ``select_action`` call.  Language-
+    conditioned policies that expose a ``task`` kwarg are tried first; a
+    :exc:`TypeError` indicates a classic policy (act, diffusion, …) that
+    ignores the task argument.
     """
+    if preprocessor is not None and postprocessor is not None:
+        import torch
+
+        from lerobot.common.control_utils import predict_action
+
+        config = getattr(policy, "config", None)
+        device_str = getattr(config, "device", None) or "cpu"
+        device = torch.device(device_str)
+        return predict_action(
+            observation=obs,
+            policy=policy,
+            device=device,
+            preprocessor=preprocessor,
+            postprocessor=postprocessor,
+            use_amp=False,
+            task=task_description or None,
+        )
+    # Fallback: pass obs dict directly (works for stubs + legacy policies)
     if task_description:
         try:
             return policy.select_action(obs, task=task_description)
