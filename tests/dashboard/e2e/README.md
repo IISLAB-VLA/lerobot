@@ -46,6 +46,10 @@ Prerequisites:
   (wrist). The spec uses the belly cam only; the extra ports are available
   for future multi-view cases.
 - No other process holding the serial port or the `/dev/video0` node.
+- Feetech motor SDK installed for the SO-101 driver:
+  ```bash
+  uv sync --extra dashboard --extra feetech
+  ```
 
 The smoke scenario walks device discovery → UI Add-Robot flow → manager
 `POST /connect` → detail page deep-link → first WebRTC frame
