@@ -160,7 +160,12 @@ function DeadmanBadge({ state }: { state: DeadmanState }): JSX.Element {
           ? "text-amber-600 dark:text-amber-400"
           : "text-muted-foreground";
   return (
-    <span className={cn("inline-flex items-center gap-1 text-xs font-medium", tone)}>
+    <span
+      className={cn("inline-flex items-center gap-1 text-xs font-medium", tone)}
+      aria-live="polite"
+      aria-atomic="true"
+      data-testid="teleop-deadman"
+    >
       <Circle className="h-2.5 w-2.5 fill-current" aria-hidden />
       {state}
     </span>
