@@ -4,6 +4,75 @@
  */
 
 export interface paths {
+    "/api/benchmarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Benchmarks Endpoint */
+        get: operations["list_benchmarks_endpoint_api_benchmarks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/benchmarks/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runs */
+        get: operations["list_runs_api_benchmarks_runs_get"];
+        put?: never;
+        /** Start Run */
+        post: operations["start_run_api_benchmarks_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/benchmarks/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run */
+        get: operations["get_run_api_benchmarks_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/benchmarks/runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Run */
+        post: operations["cancel_run_api_benchmarks_runs__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cameras": {
         parameters: {
             query?: never;
@@ -39,6 +108,57 @@ export interface paths {
         head?: never;
         /** Update Camera */
         patch: operations["update_camera_api_cameras__camera_id__patch"];
+        trace?: never;
+    };
+    "/api/cameras/{camera_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close Camera */
+        post: operations["close_camera_api_cameras__camera_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cameras/{camera_id}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open Camera */
+        post: operations["open_camera_api_cameras__camera_id__open_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cameras/{camera_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Camera Status */
+        get: operations["get_camera_status_api_cameras__camera_id__status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/devices/cameras": {
@@ -503,6 +623,94 @@ export interface components {
              */
             accepted: true;
         };
+        /**
+         * BenchmarkInfo
+         * @description One entry in the ``list_benchmarks`` response.
+         */
+        BenchmarkInfo: {
+            /** Config Type */
+            config_type: string;
+            /** Env Name */
+            env_name: string;
+            /** Fps */
+            fps: number;
+            /** Task */
+            task?: string | null;
+        };
+        /** BenchmarkListResponse */
+        BenchmarkListResponse: {
+            /** Benchmarks */
+            benchmarks: components["schemas"]["BenchmarkInfo"][];
+        };
+        /** BenchmarkRunList */
+        BenchmarkRunList: {
+            /** Runs */
+            runs: components["schemas"]["BenchmarkRunSummary"][];
+        };
+        /**
+         * BenchmarkRunSummary
+         * @description Point-in-time view of a run. Returned from REST + embedded in WS events.
+         */
+        BenchmarkRunSummary: {
+            /** Completed At */
+            completed_at?: string | null;
+            /** Current Episode */
+            current_episode: number;
+            /** Env Name */
+            env_name: string;
+            /** Episodes */
+            episodes: number;
+            /** Error */
+            error?: {
+                [key: string]: string;
+            } | null;
+            /** Last Reward */
+            last_reward?: number | null;
+            /** Policy Refs */
+            policy_refs: string[];
+            /** Progress */
+            progress: number;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            } | null;
+            /** Run Id */
+            run_id: string;
+            /** Seed */
+            seed?: number | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "completed" | "cancelled" | "failed";
+            /** Steps Total */
+            steps_total: number;
+            /** Storage Dir */
+            storage_dir: string;
+            /** Task */
+            task?: string | null;
+        };
+        /** BenchmarkStartRequest */
+        BenchmarkStartRequest: {
+            /** Env Name */
+            env_name: string;
+            /**
+             * Episodes
+             * @default 3
+             */
+            episodes: number;
+            /** Policy Refs */
+            policy_refs?: string[];
+            /** Seed */
+            seed?: number | null;
+            /** Task */
+            task?: string | null;
+        };
         /** CalibrationAckRequest */
         CalibrationAckRequest: {
             /** Session Id */
@@ -696,6 +904,28 @@ export interface components {
              * @description RTSP/HTTP stream URL or realsense serial.
              */
             url?: string | null;
+        };
+        /** CameraStatus */
+        CameraStatus: {
+            /**
+             * Frames Served
+             * @default 0
+             */
+            frames_served: number;
+            /** Last Error */
+            last_error?: string | null;
+            /**
+             * Online
+             * @default false
+             */
+            online: boolean;
+            /** Opened At */
+            opened_at?: string | null;
+            /**
+             * Subscriber Count
+             * @default 0
+             */
+            subscriber_count: number;
         };
         /** CameraStreamProfile */
         CameraStreamProfile: {
@@ -1215,6 +1445,141 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_benchmarks_endpoint_api_benchmarks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkListResponse"];
+                };
+            };
+        };
+    };
+    list_runs_api_benchmarks_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkRunList"];
+                };
+            };
+        };
+    };
+    start_run_api_benchmarks_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BenchmarkStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkRunSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_api_benchmarks_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkRunSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_run_api_benchmarks_runs__run_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkRunSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_cameras_api_cameras_get: {
         parameters: {
             query?: never;
@@ -1352,6 +1717,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CameraEntry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_camera_api_cameras__camera_id__close_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_camera_api_cameras__camera_id__open_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_camera_status_api_cameras__camera_id__status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                camera_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraStatus"];
                 };
             };
             /** @description Validation Error */
