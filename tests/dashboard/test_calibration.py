@@ -193,6 +193,30 @@ async def test_ack_mismatched_step_id_is_rejected() -> None:
     await controller.cancel(robot_id, start.session_id)
 
 
+async def test_joint_feedback_is_published_while_session_runs() -> None:
+    controller = CalibrationController()
+    mgr = _FakeRobotManager()
+    robot_id = uuid4()
+    start = await controller.start(robot_id, "ur", mgr)
+
+    async def _read() -> dict[str, Any]:
+        async for event in controller.subscribe(robot_id, start.session_id):
+            if event["type"] == "joint_feedback":
+                return event
+            if event["type"] == "done":
+                raise AssertionError("session ended before joint_feedback arrived")
+        raise AssertionError("subscription closed without joint_feedback")
+
+    feedback = await asyncio.wait_for(_read(), timeout=1.0)
+    assert feedback["step_id"] == "verify_tcp_offset"
+    assert feedback["session_id"] == start.session_id
+    assert isinstance(feedback["timestamp_ms"], int) and feedback["timestamp_ms"] > 0
+    assert feedback["values"]["joint_1.pos"] == pytest.approx(0.11)
+    assert "joint_2.pos" in feedback["values"]
+
+    await controller.cancel(robot_id, start.session_id)
+
+
 async def test_cancel_produces_cancelled_done_event() -> None:
     controller = CalibrationController()
     mgr = _FakeRobotManager()
