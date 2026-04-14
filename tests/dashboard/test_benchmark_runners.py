@@ -88,6 +88,7 @@ class _RunShim:
     progress: float = 0.0
     current_episode: int = 0
     last_reward: float | None = None
+    fps: int = 10
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +262,38 @@ async def test_runner_writes_observation_jpgs_when_obs_contains_image(tmp_path: 
     assert step_events[0]["obs_jpg_url"] == (
         "/resources/benchmarks/run-img/observations/episode_0/step_0.jpg"
     )
+
+
+async def test_runner_emits_preview_ready_with_mp4(tmp_path: Path) -> None:
+    def _factory(env_name: str) -> dict:
+        return {env_name: {0: _FakeVecEnv(action_dim=2, terminate_at=3, with_image=True)}}
+
+    run = _RunShim(
+        run_id="run-prev",
+        env_name="pusht",
+        episodes=1,
+        seed=1,
+        storage_dir=tmp_path,
+    )
+    run.fps = 10  # FakeRunShim does not declare fps; set explicitly.
+    captured: list[dict] = []
+
+    async def publish(_run: _RunShim, event: dict) -> None:
+        captured.append(event)
+
+    runner = RandomActionEnvRunner(env_factory=_factory, max_steps_per_episode=10)
+    await runner(run, publish)
+
+    preview_events = [e for e in captured if e["type"] == "preview_ready"]
+    assert len(preview_events) == 1
+    pe = preview_events[0]
+    assert pe["episode"] == 0
+    assert pe["preview_path"] == "previews/episode_0.mp4"
+    assert pe["preview_url"] == "/resources/benchmarks/run-prev/previews/episode_0.mp4"
+    assert (tmp_path / "previews" / "episode_0.mp4").is_file()
+    body = (tmp_path / "previews" / "episode_0.mp4").read_bytes()
+    # mp4 starts with size + 'ftyp' box at offset 4 (ISO BMFF).
+    assert body[4:8] == b"ftyp", f"mp4 magic missing: {body[:16]!r}"
 
 
 async def test_runner_obs_jpg_path_null_when_no_image_in_obs(tmp_path: Path) -> None:

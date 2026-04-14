@@ -256,6 +256,41 @@ def _save_jpeg(image: Any, dest: Path) -> None:
     Image.fromarray(arr).save(dest, "JPEG", quality=OBS_JPG_QUALITY)
 
 
+def _encode_episode_to_mp4(jpg_paths: list[Path], dest: Path, fps: int) -> None:
+    """Blocking JPG-sequence → H.264 mp4 encode. Wrap in :func:`asyncio.to_thread`."""
+    import av
+    import numpy as np
+    from PIL import Image
+
+    if not jpg_paths:
+        raise ValueError("jpg_paths is empty")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    first = np.asarray(Image.open(jpg_paths[0]).convert("RGB"))
+    height, width, _ = first.shape
+
+    # H.264 needs even dimensions for yuv420p.
+    width = width - (width % 2)
+    height = height - (height % 2)
+
+    container = av.open(str(dest), mode="w")
+    try:
+        stream = container.add_stream("h264", rate=fps)
+        stream.width = width
+        stream.height = height
+        stream.pix_fmt = "yuv420p"
+        stream.options = {"movflags": "+faststart"}
+
+        for path in jpg_paths:
+            arr = np.asarray(Image.open(path).convert("RGB"))[:height, :width]
+            frame = av.VideoFrame.from_ndarray(arr, format="rgb24")
+            for packet in stream.encode(frame):
+                container.mux(packet)
+        for packet in stream.encode():  # flush trailing packets
+            container.mux(packet)
+    finally:
+        container.close()
+
+
 def _action_keys_from_space(space: Any, prefix: str = "a") -> list[str]:
     """Generate stable action column names from a gym action space.
 
@@ -380,6 +415,7 @@ class RandomActionEnvRunner:
                 if terminated_scalar or truncated_scalar:
                     break
             run.progress = (episode + 1) / max(run.episodes, 1)
+            await self._finalize_episode_preview(run, episode, publish)
 
     async def _maybe_save_obs(
         self, storage_dir: Path, episode: int, step: int, obs: Any
@@ -390,6 +426,38 @@ class RandomActionEnvRunner:
         rel_path = f"observations/episode_{episode}/step_{step}.jpg"
         await asyncio.to_thread(_save_jpeg, image, storage_dir / rel_path)
         return rel_path
+
+    async def _finalize_episode_preview(self, run: Any, episode: int, publish: Any) -> None:
+        """Encode the per-episode JPG sequence into an mp4 + publish ``preview_ready``.
+
+        Skips episodes without any saved observations (state-only envs).
+        Encoding errors are logged + dropped — they shouldn't kill the run.
+        """
+        storage_dir = Path(run.storage_dir)
+        episode_dir = storage_dir / "observations" / f"episode_{episode}"
+        if not episode_dir.is_dir():
+            return
+        jpg_paths = sorted(episode_dir.glob("step_*.jpg"))
+        if not jpg_paths:
+            return
+        fps = max(int(getattr(run, "fps", 0)) or 10, 1)
+        rel_path = f"previews/episode_{episode}.mp4"
+        dest = storage_dir / rel_path
+        try:
+            await asyncio.to_thread(_encode_episode_to_mp4, jpg_paths, dest, fps)
+        except Exception:
+            logger.exception("preview encoding failed for run %s episode %s", run.run_id, episode)
+            return
+        await publish(
+            run,
+            {
+                "type": "preview_ready",
+                "episode": episode,
+                "policy_slug": self.POLICY_SLUG,
+                "preview_path": rel_path,
+                "preview_url": f"{BENCHMARK_RESOURCE_URL_PREFIX}/{run.run_id}/{rel_path}",
+            },
+        )
 
     @staticmethod
     def _seed_for(base_seed: int | None, episode: int) -> int | None:
