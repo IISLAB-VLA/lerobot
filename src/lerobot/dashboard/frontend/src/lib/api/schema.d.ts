@@ -214,6 +214,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/streams/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Stats Batch */
+        get: operations["get_stats_batch_api_streams_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/streams/{session_id}/ice": {
         parameters: {
             query?: never;
@@ -789,6 +806,19 @@ export interface components {
              */
             vid?: string | null;
         };
+        /**
+         * StatsManyResponse
+         * @description Batch response for the multi-session stats overlay.
+         *
+         *     Sessions that are missing at query time (either never existed or were
+         *     just closed) are omitted from ``sessions`` — the UI should treat their
+         *     absence as "unsubscribe this tile", matching the soft-delete behaviour
+         *     of the frontend's `useStreamStats` hook.
+         */
+        StatsManyResponse: {
+            /** Sessions */
+            sessions: components["schemas"]["StatsResponse"][];
+        };
         /** StatsResponse */
         StatsResponse: {
             /** Entries */
@@ -1362,6 +1392,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OfferResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_stats_batch_api_streams_stats_get: {
+        parameters: {
+            query?: {
+                /** @description Optional comma-separated allowlist. When omitted, every active session is returned. */
+                session_ids?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatsManyResponse"];
                 };
             };
             /** @description Validation Error */
