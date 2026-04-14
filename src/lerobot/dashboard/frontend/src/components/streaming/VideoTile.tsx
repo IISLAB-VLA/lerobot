@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Loader2, Video, VideoOff } from "lucide-react";
+import { AlertTriangle, Loader2, Maximize2, Minimize2, Video, VideoOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWebRTCStream } from "@/hooks/useWebRTCStream";
 import type { CameraEntry } from "@/lib/api/robots";
@@ -28,6 +28,33 @@ function VideoTileImpl({
   onSessionChange,
 }: VideoTileProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const figureRef = useRef<HTMLElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => {
+      setIsFullscreen(document.fullscreenElement === figureRef.current);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const onToggleFullscreen = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    try {
+      if (document.fullscreenElement === figureRef.current) {
+        await document.exitFullscreen();
+      } else {
+        if (document.fullscreenElement) {
+          await document.exitFullscreen().catch(() => undefined);
+        }
+        await figureRef.current?.requestFullscreen();
+      }
+    } catch {
+      // browser may reject without an active gesture; the click itself is one,
+      // so failures are typically policy-related (iframe sandbox, etc.).
+    }
+  };
   const {
     phase,
     stream,
@@ -74,11 +101,12 @@ function VideoTileImpl({
 
   return (
     <figure
+      ref={figureRef}
       data-testid="video-tile"
       data-camera-id={camera.id}
       aria-label={camera.name}
       className={cn(
-        "relative flex h-full w-full flex-col overflow-hidden rounded-md border bg-black text-white",
+        "group relative flex h-full w-full flex-col overflow-hidden rounded-md border bg-black text-white",
         emphasised ? "ring-2 ring-primary" : null,
         className,
       )}
@@ -91,6 +119,20 @@ function VideoTileImpl({
         className="h-full w-full bg-black object-contain"
       />
       {overlay}
+      <button
+        type="button"
+        onClick={onToggleFullscreen}
+        aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        title={isFullscreen ? "Exit fullscreen" : "Fullscreen this tile"}
+        data-testid="video-tile-fullscreen"
+        className="absolute left-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded bg-black/45 text-white/80 opacity-0 transition-opacity hover:bg-black/70 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 group-focus-within:opacity-100"
+      >
+        {isFullscreen ? (
+          <Minimize2 className="h-3.5 w-3.5" aria-hidden />
+        ) : (
+          <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+        )}
+      </button>
       {showStats && stats ? (
         <dl
           className="pointer-events-none absolute right-2 top-2 grid grid-cols-[auto_auto] gap-x-2 gap-y-0.5 rounded bg-black/65 px-2 py-1 text-[10px] font-mono text-white/85"
