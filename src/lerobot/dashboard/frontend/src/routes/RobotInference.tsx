@@ -162,16 +162,12 @@ export function RobotInferencePage(): JSX.Element {
       (activeSession.status === "running" || activeSession.status === "starting"),
   );
 
-  // Keep a ref to the stable mutate function so the cleanup can call it without
-  // putting the entire deadmanMutation object in the effect deps. Including the
-  // full useMutation result in deps would cause the effect to re-run on every
-  // mutation state change (pending → success → idle), which triggers the cleanup
-  // while deadmanHeld is still true, creating an infinite mutate(false) cascade
-  // that ends in React Error #185 (maximum update depth exceeded).
-  const deadmanMutateRef = useRef(deadmanMutation.mutate);
-  useEffect(() => {
-    deadmanMutateRef.current = deadmanMutation.mutate;
-  });
+  // Destructure `mutate` so the effect dep is a stable function reference.
+  // The full `deadmanMutation` object gets a new identity on every mutation
+  // state change (pending → success → idle), which would cause this effect
+  // to re-run, clean up (spuriously calling mutate(false)), and loop until
+  // React Error #185 (Maximum update depth exceeded).
+  const { mutate: mutateDeadman } = deadmanMutation;
 
   useEffect(() => {
     if (!deadmanActive) return undefined;
@@ -185,13 +181,13 @@ export function RobotInferencePage(): JSX.Element {
       if (event.code !== "Space" || event.repeat) return;
       if (isEditable(event.target)) return;
       event.preventDefault();
-      if (!deadmanHeld) deadmanMutateRef.current(true);
+      if (!deadmanHeld) mutateDeadman(true);
     };
     const onKeyUp = (event: KeyboardEvent) => {
       if (event.code !== "Space") return;
       if (isEditable(event.target)) return;
       event.preventDefault();
-      if (deadmanHeld) deadmanMutateRef.current(false);
+      if (deadmanHeld) mutateDeadman(false);
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -199,13 +195,23 @@ export function RobotInferencePage(): JSX.Element {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       // Release if we navigate away or the session ends mid-hold so the loop pauses cleanly.
-      if (deadmanHeld) deadmanMutateRef.current(false);
+      if (deadmanHeld) mutateDeadman(false);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deadmanActive, deadmanHeld]);
+  }, [deadmanActive, deadmanHeld, mutateDeadman]);
 
   if (robotsQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading robot…</p>;
+  }
+  if (robotsQuery.isError) {
+    return (
+      <div
+        role="alert"
+        className="rounded-md border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive"
+      >
+        Failed to load robots:{" "}
+        {robotsQuery.error instanceof Error ? robotsQuery.error.message : "unknown error"}
+      </div>
+    );
   }
   if (!robot) {
     return (
@@ -258,6 +264,8 @@ export function RobotInferencePage(): JSX.Element {
       <div className="grid gap-4 md:grid-cols-[2fr_3fr]">
         <ConfigPanel
           policies={policies}
+          loadingPolicies={policiesQuery.isLoading}
+          errorPolicies={policiesQuery.isError}
           repoId={repoId}
           setRepoId={setRepoId}
           selectedPolicy={selectedPolicy}
@@ -290,6 +298,7 @@ export function RobotInferencePage(): JSX.Element {
           deadmanPending={deadmanMutation.isPending}
           supportsLanguage={selectedPolicy?.supports_language ?? false}
           running={Boolean(running)}
+          maxActionMagnitude={parsedMaxAction}
         />
       </div>
     </div>
@@ -302,6 +311,8 @@ function subscriptionTerminal(session: InferenceSession): boolean {
 
 interface ConfigPanelProps {
   policies: PolicyDescriptor[];
+  loadingPolicies: boolean;
+  errorPolicies: boolean;
   repoId: string;
   setRepoId: (v: string) => void;
   selectedPolicy: PolicyDescriptor | null;
@@ -324,6 +335,8 @@ interface ConfigPanelProps {
 
 function ConfigPanel({
   policies,
+  loadingPolicies,
+  errorPolicies,
   repoId,
   setRepoId,
   selectedPolicy,
@@ -353,7 +366,16 @@ function ConfigPanel({
     <section className="flex flex-col gap-4 rounded-md border bg-card p-4">
       <div className="grid gap-2">
         <Label htmlFor="policy">Policy</Label>
-        {policies.length > 0 ? (
+        {loadingPolicies ? (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            Scanning HF cache…
+          </p>
+        ) : errorPolicies ? (
+          <p role="alert" className="text-xs text-destructive">
+            Failed to load policy list. Check that the backend is reachable.
+          </p>
+        ) : policies.length > 0 ? (
           <Select id="policy" value={repoId} onChange={(e) => setRepoId(e.target.value)}>
             {policies.map((p) => (
               <option key={p.repo_id} value={p.repo_id}>
@@ -511,6 +533,7 @@ interface SessionPanelProps {
   deadmanPending: boolean;
   supportsLanguage: boolean;
   running: boolean;
+  maxActionMagnitude: number | null;
 }
 
 function SessionPanel({
@@ -525,6 +548,7 @@ function SessionPanel({
   deadmanPending,
   supportsLanguage,
   running,
+  maxActionMagnitude,
 }: SessionPanelProps): JSX.Element {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -579,6 +603,15 @@ function SessionPanel({
               />
               {deadmanHeld ? "deadman: held" : "deadman: release"}
               {deadmanPending ? " …" : ""}
+            </span>
+          ) : null}
+          {maxActionMagnitude !== null && running && !activeSession?.dry_run ? (
+            <span
+              data-testid="inference-safety-clamp"
+              className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"
+              title={`Action elements clamped to ±${maxActionMagnitude}`}
+            >
+              clamp ±{maxActionMagnitude}
             </span>
           ) : null}
           <span

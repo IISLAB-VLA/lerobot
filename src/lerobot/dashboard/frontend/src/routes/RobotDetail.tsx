@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BrainCircuit, Disc3, Sliders } from "lucide-react";
+import { ArrowLeft, BrainCircuit, Disc3, Sliders, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import {
@@ -249,7 +249,7 @@ export function RobotDetailPage(): JSX.Element {
         />
       ) : null}
 
-      {import.meta.env.VITE_ENABLE_TELEOP === "1" ? (
+      {import.meta.env.VITE_ENABLE_TELEOP !== "0" ? (
         <TeleopPanel robotId={robot.id} enabled={statusKind === "online"} />
       ) : null}
 
@@ -283,6 +283,16 @@ export function RobotDetailPage(): JSX.Element {
         />
       </section>
 
+      {cameras.length > 1 && layout === "single" ? (
+        <ThumbnailStrip
+          cameras={cameras}
+          onSelect={(cameraId) => {
+            setSpotlightCameraId(cameraId);
+            setLayout("spotlight");
+          }}
+        />
+      ) : null}
+
       {statusKind !== "online" ? (
         <p className="text-xs text-muted-foreground">
           Streams activate once the robot reports <span className="font-medium">online</span>.
@@ -296,6 +306,39 @@ export function RobotDetailPage(): JSX.Element {
           <kbd className="rounded border px-1">Esc</kbd> exit fullscreen.
         </p>
       )}
+    </div>
+  );
+}
+
+function ThumbnailStrip({
+  cameras,
+  onSelect,
+}: {
+  cameras: CameraEntry[];
+  onSelect: (cameraId: string) => void;
+}): JSX.Element {
+  return (
+    <div
+      className="flex items-center gap-2 overflow-x-auto py-1"
+      aria-label="Switch camera"
+      data-testid="thumbnail-strip"
+    >
+      {cameras.map((cam) => (
+        <button
+          key={cam.id}
+          type="button"
+          onClick={() => onSelect(cam.id)}
+          aria-label={`Spotlight ${cam.name}`}
+          data-testid="thumbnail-strip-item"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Video className="h-3 w-3" aria-hidden />
+          <span className="max-w-[8rem] truncate">{cam.name}</span>
+        </button>
+      ))}
+      <span className="shrink-0 text-[11px] text-muted-foreground">
+        Click to spotlight
+      </span>
     </div>
   );
 }

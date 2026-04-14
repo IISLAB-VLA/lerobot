@@ -114,6 +114,9 @@ export function useTeleopSession({
       setDeadman(frame.payload.deadman);
     } else if (frame.type === "state") {
       setDeadman(frame.payload.state);
+      if (frame.payload.state === "lockout" && frame.payload.reason) {
+        setLastError(`lockout: ${frame.payload.reason}`);
+      }
     } else if (frame.type === "error") {
       setLastError(`${frame.payload.code}: ${frame.payload.message}`);
     }

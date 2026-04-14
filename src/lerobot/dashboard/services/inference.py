@@ -31,8 +31,7 @@ import hashlib
 import logging
 import re
 import time
-from collections import OrderedDict
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -44,6 +43,13 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
 from lerobot.dashboard.services.camera_manager import CameraManagerProtocol
+from lerobot.dashboard.services.policy_loader import (
+    PolicyCache,
+    PolicyDescriptor,
+    PolicyLoader,
+    _default_policy_loader,
+    scan_hf_cache,
+)
 from lerobot.dashboard.services.registry import Registry
 from lerobot.dashboard.services.registry_models import CameraEntry, RobotEntry
 from lerobot.dashboard.services.robot_manager import RobotManagerProtocol
@@ -69,28 +75,7 @@ class InferenceValidationError(InferenceError):
 
 InferenceStatus = Literal["starting", "running", "stopping", "stopped", "failed"]
 _TERMINAL_STATUSES: frozenset[str] = frozenset({"stopped", "failed"})
-_LANGUAGE_POLICY_TYPES: frozenset[str] = frozenset({"pi0", "pi05", "smolvla", "wall_x"})
 _REPO_ID_RE = re.compile(r"^[\w.\-]+/[\w.\-]+$|^[\w.\-]+$")
-
-
-# ---------------------------------------------------------------------------
-# Policy discovery + loading
-# ---------------------------------------------------------------------------
-
-
-class PolicyDescriptor(BaseModel):
-    """Summary of a locally cached policy checkpoint."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    repo_id: str
-    policy_type: str
-    root: str
-    num_parameters: int | None = None
-    last_modified: datetime | None = None
-    observation_features: dict[str, Any] | None = None
-    action_features: dict[str, Any] | None = None
-    supports_language: bool = False
 
 
 class StartRequest(BaseModel):
@@ -167,143 +152,6 @@ class StepEvent(BaseModel):
     reason: str | None = None
 
 
-PolicyLoader = Callable[[str], Any]
-"""Callable ``repo_id -> PreTrainedPolicy``. Injectable for tests."""
-
-
-def _default_policy_loader(repo_id: str) -> Any:  # pragma: no cover — touches HF cache
-    """Thread-safe ``PreTrainedPolicy.from_pretrained(repo_id)`` wrapper."""
-    from lerobot.policies.pretrained import PreTrainedPolicy
-
-    return PreTrainedPolicy.from_pretrained(repo_id)
-
-
-def scan_hf_cache(cache_dir: Path | None = None) -> list[PolicyDescriptor]:
-    """Enumerate locally cached LeRobot policies.
-
-    Scans the HuggingFace cache directory (``cache_dir``, defaulting to
-    ``HF_HOME/hub``) for repos whose ``config.json`` declares a
-    ``policy_type`` known to :func:`lerobot.policies.factory.get_policy_class`.
-    Unknown or partially-downloaded repos are skipped with a debug log
-    rather than raising — a missing policy file shouldn't block the UI
-    from listing the rest.
-    """
-    from huggingface_hub import scan_cache_dir
-
-    try:
-        info = scan_cache_dir(cache_dir) if cache_dir is not None else scan_cache_dir()
-    except Exception as exc:  # noqa: BLE001 — a bad cache should not break list endpoints
-        logger.warning("scan_cache_dir failed: %s", exc)
-        return []
-
-    descriptors: list[PolicyDescriptor] = []
-    for repo in info.repos:
-        if repo.repo_type != "model":
-            continue
-        descriptor = _describe_cached_repo(repo)
-        if descriptor is not None:
-            descriptors.append(descriptor)
-    descriptors.sort(key=lambda d: (d.last_modified or datetime.min), reverse=True)
-    return descriptors
-
-
-def _describe_cached_repo(repo: Any) -> PolicyDescriptor | None:
-    """Build a :class:`PolicyDescriptor` from a single ``CachedRepoInfo``."""
-    import json
-
-    repo_path = Path(repo.repo_path)
-    config_path = _find_first(repo_path, "config.json")
-    if config_path is None:
-        return None
-    try:
-        with config_path.open(encoding="utf-8") as fp:
-            config = json.load(fp)
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.debug("skip cached repo %s (unreadable config.json): %s", repo.repo_id, exc)
-        return None
-    policy_type = config.get("policy_type") or config.get("type")
-    if not policy_type:
-        return None
-    if not _is_known_policy_type(policy_type):
-        return None
-    last_modified = datetime.fromtimestamp(repo.last_modified, tz=UTC) if repo.last_modified else None
-    return PolicyDescriptor(
-        repo_id=repo.repo_id,
-        policy_type=policy_type,
-        root=str(repo_path),
-        num_parameters=config.get("num_parameters"),
-        last_modified=last_modified,
-        observation_features=config.get("input_features") or config.get("observation_features"),
-        action_features=config.get("output_features") or config.get("action_features"),
-        supports_language=policy_type in _LANGUAGE_POLICY_TYPES,
-    )
-
-
-def _find_first(root: Path, filename: str) -> Path | None:
-    """Return the first ``filename`` under ``root`` (breadth-first)."""
-    for candidate in root.rglob(filename):
-        if candidate.is_file():
-            return candidate
-    return None
-
-
-def _is_known_policy_type(policy_type: str) -> bool:
-    try:
-        from lerobot.policies.factory import get_policy_class
-
-        get_policy_class(policy_type)
-    except Exception:
-        return False
-    return True
-
-
-# ---------------------------------------------------------------------------
-# LRU policy cache
-# ---------------------------------------------------------------------------
-
-
-class PolicyCache:
-    """Least-recently-used cache of loaded :class:`PreTrainedPolicy` handles.
-
-    Default ``max_resident=2`` keeps typical dashboard memory bounded when
-    the operator toggles between a small set of policies without forcing
-    a weight reload on every start/stop.
-    """
-
-    def __init__(
-        self,
-        loader: PolicyLoader,
-        max_resident: int = 2,
-    ) -> None:
-        self._loader = loader
-        self._max = max_resident
-        self._lock = asyncio.Lock()
-        self._entries: OrderedDict[str, Any] = OrderedDict()
-
-    async def get(self, repo_id: str) -> Any:
-        async with self._lock:
-            if repo_id in self._entries:
-                self._entries.move_to_end(repo_id)
-                return self._entries[repo_id]
-        # Load outside the lock — a cold model can take seconds and we
-        # don't want to block concurrent ``get`` calls for other repos.
-        policy = await asyncio.to_thread(self._loader, repo_id)
-        async with self._lock:
-            self._entries[repo_id] = policy
-            self._entries.move_to_end(repo_id)
-            while len(self._entries) > self._max:
-                self._entries.popitem(last=False)
-        return policy
-
-    async def evict(self, repo_id: str) -> None:
-        async with self._lock:
-            self._entries.pop(repo_id, None)
-
-    async def clear(self) -> None:
-        async with self._lock:
-            self._entries.clear()
-
-
 # ---------------------------------------------------------------------------
 # Session state
 # ---------------------------------------------------------------------------
@@ -319,6 +167,8 @@ class _Session:
     cameras: list[CameraEntry] = field(default_factory=list)
     camera_iters: dict[UUID, AsyncIterator[Any]] = field(default_factory=dict)
     policy: Any = None
+    preprocessor: Any = None  # PolicyProcessorPipeline | None
+    postprocessor: Any = None  # PolicyProcessorPipeline | None
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +279,13 @@ class InferenceService:
                 await self._robot_manager.get_features(req.robot_id),
             )
             await self._open_camera_subscribers(session)
+            # Load pre/post-processor pipelines so real policies (e.g. smolvla)
+            # receive properly converted tensors + language tokens at each step.
+            # Falls back to (None, None) for stubs and policies without saved
+            # processor configs — those use the direct select_action path.
+            session.preprocessor, session.postprocessor = await self._load_processors(
+                req.repo_id, session.policy
+            )
         except InferenceError:
             # Typed errors (validation / conflict / not-found) already map
             # to the right HTTP status — propagate them without wrapping,
@@ -565,10 +422,16 @@ class InferenceService:
     async def _step_once(self, session: _Session) -> bool:
         """One observation + policy.select_action + optional send_action."""
         try:
-            obs = await self._robot_manager.read_observation(session.model.robot_id)
+            obs_raw = await self._robot_manager.read_observation(session.model.robot_id)
         except Exception as exc:
             logger.warning("read_observation failed: %s", exc)
             return True
+
+        # Strip metadata keys that are not numpy arrays (e.g. ``robot_id``,
+        # ``online``, ``timestamp`` produced by InMemoryRobotManager).
+        # ``prepare_observation_for_inference`` calls ``torch.from_numpy`` on
+        # every value, so non-array entries would raise a TypeError.
+        obs: dict[str, np.ndarray] = {k: v for k, v in obs_raw.items() if isinstance(v, np.ndarray)}
 
         stall_timeout = max((1.0 / session.model.fps) * 3, 0.25)
         images: dict[str, np.ndarray] = {}
@@ -594,7 +457,12 @@ class InferenceService:
         try:
             async with self._policy_exec_lock:
                 action_tensor = await asyncio.to_thread(
-                    _run_policy, policy, obs, session.model.task_description
+                    _run_policy,
+                    policy,
+                    obs,
+                    session.model.task_description,
+                    session.preprocessor,
+                    session.postprocessor,
                 )
         except Exception as exc:
             logger.warning("policy.select_action failed: %s", exc)
@@ -691,6 +559,28 @@ class InferenceService:
                 await iterator.aclose()  # type: ignore[attr-defined]
             session.camera_iters.pop(cam_id, None)
 
+    async def _load_processors(self, repo_id: str, policy: Any) -> tuple[Any, Any]:
+        """Load pre/post-processor pipelines for ``repo_id``.
+
+        Uses ``make_pre_post_processors`` (loaded lazily to avoid importing
+        the full lerobot policy stack at module import time). Falls back to
+        ``(None, None)`` when the policy is a test stub (no ``.config``), the
+        processor config is not found, or any other error occurs. Those
+        sessions use the direct ``select_action`` path in ``_run_policy``.
+        """
+        config = getattr(policy, "config", None)
+        if config is None:
+            return None, None
+        try:
+            from lerobot.policies.factory import make_pre_post_processors
+
+            preprocessor, postprocessor = await asyncio.to_thread(make_pre_post_processors, config, repo_id)
+            logger.debug("processor pipeline loaded for %s", repo_id)
+            return preprocessor, postprocessor
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("processor pipeline not available for %s: %s", repo_id, exc)
+            return None, None
+
     async def _emit(self, session: _Session, event: StepEvent) -> None:
         async with session.lock:
             queues = list(session.subscribers)
@@ -704,12 +594,46 @@ class InferenceService:
 # ---------------------------------------------------------------------------
 
 
-def _run_policy(policy: Any, obs: dict[str, Any], task_description: str) -> Any:
+def _run_policy(
+    policy: Any,
+    obs: dict[str, np.ndarray],
+    task_description: str,
+    preprocessor: Any = None,
+    postprocessor: Any = None,
+) -> Any:
     """Call ``policy.select_action`` safely. Runs on a worker thread.
 
-    Tries to pass ``task`` when the policy advertises language support; falls
-    back to a no-kwarg call for classic policies (act, diffusion, ...).
+    When *preprocessor* and *postprocessor* are provided (loaded via
+    ``make_pre_post_processors``), delegates to :func:`predict_action` from
+    ``lerobot.common.control_utils``.  That helper converts raw numpy arrays
+    to PyTorch tensors, runs the processor pipeline (normalisation, language
+    tokenisation, device placement), calls ``select_action``, and
+    unnormalises the action.
+
+    Without processors (test stubs, policies without a saved processor
+    config), falls through to a bare ``select_action`` call.  Language-
+    conditioned policies that expose a ``task`` kwarg are tried first; a
+    :exc:`TypeError` indicates a classic policy (act, diffusion, …) that
+    ignores the task argument.
     """
+    if preprocessor is not None and postprocessor is not None:
+        import torch
+
+        from lerobot.common.control_utils import predict_action
+
+        config = getattr(policy, "config", None)
+        device_str = getattr(config, "device", None) or "cpu"
+        device = torch.device(device_str)
+        return predict_action(
+            observation=obs,
+            policy=policy,
+            device=device,
+            preprocessor=preprocessor,
+            postprocessor=postprocessor,
+            use_amp=False,
+            task=task_description or None,
+        )
+    # Fallback: pass obs dict directly (works for stubs + legacy policies)
     if task_description:
         try:
             return policy.select_action(obs, task=task_description)
@@ -827,6 +751,7 @@ __all__ = [
     "InferenceSession",
     "InferenceStatus",
     "InferenceValidationError",
+    # Re-exported from policy_loader for backwards compat with existing imports
     "PolicyCache",
     "PolicyDescriptor",
     "PolicyLoader",
