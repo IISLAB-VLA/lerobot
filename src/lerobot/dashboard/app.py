@@ -15,6 +15,7 @@ from lerobot.dashboard.api.router import build_api_router
 from lerobot.dashboard.core.config import DashboardConfig
 from lerobot.dashboard.core.state import AppState
 from lerobot.dashboard.services.assets import RESOURCE_URL_PREFIX, AssetManager
+from lerobot.dashboard.services.calibration import CalibrationController
 from lerobot.dashboard.services.camera_manager import InMemoryCameraManager, LerobotCameraManager
 from lerobot.dashboard.services.recorder import RecorderService
 from lerobot.dashboard.services.registry import Registry, registry_path_for
@@ -81,6 +82,7 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         state.robot_manager = LerobotRobotManager()
         state.camera_manager = LerobotCameraManager()
     state.teleop_manager = InMemoryTeleopManager()
+    state.calibration = CalibrationController()
     # Streaming bridges the camera_manager's ``subscribe()`` into the
     # WebRTC track. In ``fake_devices`` mode ``state.camera_manager`` is
     # the in-memory fallback so the wiring still succeeds — frames are
