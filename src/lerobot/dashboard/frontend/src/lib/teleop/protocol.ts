@@ -96,7 +96,7 @@ export type ServerFrame = {
 } & ServerFramePayload;
 
 export function teleopWsPath(robotId: string): string {
-  return `/ws/teleop/${robotId}`;
+  return `/ws/robots/${robotId}/teleop`;
 }
 
 export function parseServerFrame(raw: string): ServerFrame | null {
