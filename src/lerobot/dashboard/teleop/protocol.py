@@ -18,12 +18,91 @@ Per-type payload contracts (enforced by the handler, not by this module):
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Union
 
 
 class ProtocolError(ValueError):
     """Raised when a frame cannot be decoded against the envelope schema."""
+
+
+class TeleopEventKind(str, enum.Enum):
+    """Discriminator for :data:`TeleopEvent`.
+
+    These are the raw human-input events the dispatcher fans out to
+    :class:`TeleopManagerProtocol.handle_input`. The ``action`` path
+    (pre-sanitised joint vectors) stays on the envelope layer —
+    ``ClientFrame(type=action)`` goes through :class:`ActionValidator`
+    and :meth:`RobotManagerProtocol.send_action` directly without
+    constructing a :class:`TeleopEvent`.
+    """
+
+    KEYBOARD = "keyboard"
+    MOUSE = "mouse"
+    GAMEPAD = "gamepad"
+
+
+@dataclass(frozen=True)
+class KeyboardEvent:
+    kind: TeleopEventKind = field(default=TeleopEventKind.KEYBOARD, init=False)
+    key: str = ""
+    pressed: bool = False
+
+
+@dataclass(frozen=True)
+class MouseEvent:
+    kind: TeleopEventKind = field(default=TeleopEventKind.MOUSE, init=False)
+    dx: float = 0.0
+    dy: float = 0.0
+    buttons: int = 0
+
+
+@dataclass(frozen=True)
+class GamepadEvent:
+    kind: TeleopEventKind = field(default=TeleopEventKind.GAMEPAD, init=False)
+    axes: tuple[float, ...] = ()
+    buttons: tuple[bool, ...] = ()
+
+
+TeleopEvent = Union[KeyboardEvent, MouseEvent, GamepadEvent]
+"""Tagged-union type consumed by the dispatcher's input handler.
+
+Always carries ``kind`` (a :class:`TeleopEventKind`) so downstream code
+can ``match`` on event shape without instance-checks scattered through
+the handler.
+"""
+
+
+def parse_teleop_event(payload: Any) -> TeleopEvent:
+    """Decode one raw ``dict`` payload into a typed :data:`TeleopEvent`.
+
+    Raises :class:`ProtocolError` when the discriminator is missing or
+    the payload fields don't match the declared event shape.
+    """
+    if not isinstance(payload, dict):
+        raise ProtocolError(f"event payload must be an object, got {type(payload).__name__}")
+    raw_kind = payload.get("kind")
+    if raw_kind is None:
+        raise ProtocolError("event payload missing 'kind' discriminator")
+    try:
+        kind = TeleopEventKind(raw_kind)
+    except ValueError as exc:
+        raise ProtocolError(f"unknown teleop event kind: {raw_kind!r}") from exc
+    try:
+        if kind is TeleopEventKind.KEYBOARD:
+            return KeyboardEvent(key=str(payload["key"]), pressed=bool(payload["pressed"]))
+        if kind is TeleopEventKind.MOUSE:
+            return MouseEvent(
+                dx=float(payload.get("dx", 0.0)),
+                dy=float(payload.get("dy", 0.0)),
+                buttons=int(payload.get("buttons", 0)),
+            )
+        # gamepad
+        axes = tuple(float(v) for v in payload.get("axes", ()))
+        buttons = tuple(bool(v) for v in payload.get("buttons", ()))
+        return GamepadEvent(axes=axes, buttons=buttons)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ProtocolError(f"malformed {kind.value} event: {exc}") from exc
 
 
 class ClientFrameType(str, enum.Enum):
