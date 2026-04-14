@@ -140,6 +140,26 @@ test.describe("Robot detail", () => {
     await expect(grid).toHaveAttribute("aria-pressed", "false");
   });
 
+  test("\"I\" key toggles the stats overlay flag in localStorage", async ({ page, request }) => {
+    // The visual <dl data-testid=video-tile-stats> only renders when a
+    // sessionId has stats queued, which requires a real WebRTC peer; that
+    // does not happen in headless. Instead verify the keybinding round-trip
+    // by inspecting the persisted flag the overlay reads from.
+    const { robotId } = await seedRobot(request, "Stats Bot", 1);
+    await gotoDetail(page, robotId);
+    await page.evaluate(() => window.localStorage.setItem("lerobot-stats-overlay", "0"));
+
+    await page.keyboard.press("i");
+    await expect
+      .poll(async () => page.evaluate(() => window.localStorage.getItem("lerobot-stats-overlay")))
+      .toBe("1");
+
+    await page.keyboard.press("i");
+    await expect
+      .poll(async () => page.evaluate(() => window.localStorage.getItem("lerobot-stats-overlay")))
+      .toBe("0");
+  });
+
   test("robot with no cameras shows empty state and multi-tile layouts disabled", async ({
     page,
     request,
