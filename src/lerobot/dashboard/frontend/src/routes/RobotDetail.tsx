@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Disc3, Sliders } from "lucide-react";
+import { ArrowLeft, BrainCircuit, Disc3, Sliders } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import {
@@ -206,6 +206,14 @@ export function RobotDetailPage(): JSX.Element {
               <Link to={`/robots/${robot.id}/calibrate`}>
                 <Sliders className="h-4 w-4" aria-hidden />
                 Calibrate
+              </Link>
+            </Button>
+          ) : null}
+          {import.meta.env.VITE_ENABLE_INFERENCE === "1" ? (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/robots/${robot.id}/inference`}>
+                <BrainCircuit className="h-4 w-4" aria-hidden />
+                Run policy
               </Link>
             </Button>
           ) : null}
