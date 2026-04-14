@@ -44,7 +44,7 @@ from lerobot.dashboard.teleop.deadman import DeadmanStateMachine
 from lerobot.dashboard.teleop.protocol import TeleopEvent
 from lerobot.dashboard.teleop.validator import ActionValidationError, ActionValidator
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover — avoid a circular import with teleop_manager
     from lerobot.dashboard.services.teleop_manager import TeleopManagerProtocol
 
 logger = logging.getLogger(__name__)
