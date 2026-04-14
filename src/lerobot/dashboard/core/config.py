@@ -12,6 +12,14 @@ ENV_STORAGE_DIR = "LEROBOT_DASHBOARD_STORAGE_DIR"
 ENV_STATIC_DIR = "LEROBOT_DASHBOARD_STATIC_DIR"
 ENV_CORS_ORIGINS = "LEROBOT_DASHBOARD_CORS_ORIGINS"
 ENV_LOG_LEVEL = "LEROBOT_DASHBOARD_LOG_LEVEL"
+ENV_FAKE_DEVICES = "LEROBOT_DASHBOARD_FAKE_DEVICES"
+ENV_FAKE_POLICY = "LEROBOT_DASHBOARD_FAKE_POLICY"
+
+
+def _parse_bool(raw: str | None) -> bool:
+    if raw is None:
+        return False
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 _DEFAULT_DEV_ORIGINS: tuple[str, ...] = (
     "http://localhost:5173",
@@ -38,6 +46,12 @@ class DashboardConfig:
     static_dir: Path | None = None
     cors_origins: tuple[str, ...] = _DEFAULT_DEV_ORIGINS
     log_level: str = "info"
+    fake_devices: bool = field(
+        default_factory=lambda: _parse_bool(os.environ.get(ENV_FAKE_DEVICES))
+    )
+    fake_policy: bool = field(
+        default_factory=lambda: _parse_bool(os.environ.get(ENV_FAKE_POLICY))
+    )
 
     def export_to_env(self) -> None:
         """Write config values into ``os.environ`` for the uvicorn factory."""
@@ -48,6 +62,8 @@ class DashboardConfig:
             os.environ.pop(ENV_STATIC_DIR, None)
         os.environ[ENV_CORS_ORIGINS] = ",".join(self.cors_origins)
         os.environ[ENV_LOG_LEVEL] = self.log_level
+        os.environ[ENV_FAKE_DEVICES] = "1" if self.fake_devices else "0"
+        os.environ[ENV_FAKE_POLICY] = "1" if self.fake_policy else "0"
 
     @classmethod
     def from_env(cls) -> DashboardConfig:
@@ -71,4 +87,6 @@ class DashboardConfig:
             static_dir=static_dir,
             cors_origins=origins,
             log_level=log_level,
+            fake_devices=_parse_bool(os.environ.get(ENV_FAKE_DEVICES)),
+            fake_policy=_parse_bool(os.environ.get(ENV_FAKE_POLICY)),
         )
