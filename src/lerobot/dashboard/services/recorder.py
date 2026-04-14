@@ -134,6 +134,9 @@ class _Session:
     dataset_handle: Any = None  # LeRobotDataset (avoid import-at-module-load)
     robot_entry: RobotEntry | None = None
     cameras: list[CameraEntry] = field(default_factory=list)
+    # Per-camera frame subscriber, populated on session start. ``None`` until
+    # ``start()`` opens the cameras and wires up the iterators.
+    camera_iters: dict[UUID, AsyncIterator[Any]] = field(default_factory=dict)
 
 
 class RecorderService:
@@ -200,7 +203,9 @@ class RecorderService:
             session.dataset_handle = await asyncio.to_thread(
                 self._create_dataset, req, features, dataset_path, robot.robot_type
             )
+            await self._open_camera_subscribers(session)
         except Exception as exc:
+            await self._close_camera_subscribers(session)
             async with session.lock:
                 session.model = session.model.model_copy(update={"status": "failed", "error": str(exc)})
             logger.exception("recorder: dataset creation failed for %s", req.dataset_name)
@@ -210,6 +215,25 @@ class RecorderService:
         async with session.lock:
             session.model = session.model.model_copy(update={"status": "recording"})
         return session.model.model_copy()
+
+    async def _open_camera_subscribers(self, session: _Session) -> None:
+        """Open each referenced camera and stash a subscribe() iterator on the
+        session. Cameras already open (e.g. shared with the streaming stack)
+        get a no-op ``open`` thanks to :class:`CameraManagerProtocol`'s
+        idempotent contract; each subscriber is independent."""
+        for cam in session.cameras:
+            await self._camera_manager.open(cam)
+            # ``subscribe`` is an async generator — calling returns the
+            # iterator without awaiting. Store it so stop() can aclose() later.
+            session.camera_iters[cam.id] = self._camera_manager.subscribe(cam.id)
+
+    async def _close_camera_subscribers(self, session: _Session) -> None:
+        """Release subscribe iterators. Idempotent so ``stop`` + ``close``
+        can both call safely."""
+        for cam_id, iterator in list(session.camera_iters.items()):
+            with suppress(Exception):
+                await iterator.aclose()  # type: ignore[attr-defined]
+            session.camera_iters.pop(cam_id, None)
 
     async def stop(self, session_id: UUID, save: bool) -> RecordingSession:
         session = self._require(session_id)
@@ -225,6 +249,7 @@ class RecorderService:
             with suppress(asyncio.CancelledError):
                 await session.task
 
+        await self._close_camera_subscribers(session)
         summary = await asyncio.to_thread(self._finalize_dataset, session, save)
         async with session.lock:
             session.model = summary
@@ -425,22 +450,53 @@ class RecorderService:
             logger.exception("recorder: capture loop crashed for %s", session.model.id)
 
     async def _capture_one_frame(self, session: _Session) -> bool:
-        """Read one frame + observation and hand it to the dataset. Returns
-        ``True`` on drop."""
+        """Compose one dataset frame (observation + camera frames) and push
+        it into the LeRobotDataset writer. Returns ``True`` if the frame is
+        dropped (robot read failed, camera stuck, or writer refused).
+
+        Architecture note: ``robot_manager.read_observation`` is expected to
+        return motor/joint state only — camera frames arrive via the
+        ``camera_manager.subscribe`` iterators opened at session start.
+        This separation matches the V4L2 / RealSense EBUSY constraints
+        where only one consumer can hold the device handle; the camera
+        manager is that consumer and multiplexes frames through its
+        per-subscriber queue.
+        """
         try:
             obs = await self._robot_manager.read_observation(session.model.robot_id)
         except Exception as exc:
             logger.warning("read_observation failed: %s", exc)
             return True
+
         frame: dict[str, Any] = {"task": session.model.task_description}
         for key, value in obs.items():
-            # Forward any pre-prefixed observation.* keys verbatim; the dataset
-            # writer validates against its feature dict.
+            # Forward observation.* keys verbatim so adapters can still
+            # round-trip pre-prefixed state dicts.
             if key.startswith("observation."):
                 frame[key] = value
-        # The adapter layer (task #6) is responsible for populating the action
-        # field; the InMemory fallback leaves it unset and add_frame accepts
-        # partial frames when features are missing.
+
+        # Pull the latest frame from each camera subscriber. A subscriber
+        # that stalls within a generous window is treated as a drop rather
+        # than a fatal error — capture continues so an occasional hiccup
+        # doesn't derail a long session. The timeout is a multiple of the
+        # dataset period so normal scheduler jitter doesn't register as a
+        # stall even when the recorder and camera fps match.
+        period = 1.0 / session.model.fps
+        stall_timeout = max(period * 3, 0.25)
+        for cam in session.cameras:
+            iterator = session.camera_iters.get(cam.id)
+            if iterator is None:
+                continue
+            try:
+                image = await asyncio.wait_for(anext(iterator), timeout=stall_timeout)
+            except (TimeoutError, StopAsyncIteration) as exc:
+                logger.warning("camera %s subscribe stalled: %s", cam.id, exc)
+                return True
+            except Exception as exc:
+                logger.warning("camera %s subscribe failed: %s", cam.id, exc)
+                return True
+            frame[f"observation.images.{cam.name}"] = image
+
         if session.dataset_handle is None:
             return True
         try:

@@ -300,3 +300,35 @@ async def test_capture_loop_increments_frame_counter(
         assert (snapshot.frames_captured + snapshot.drop_count) > 0
     finally:
         await svc.stop(session.id, save=False)
+
+
+async def test_start_opens_cameras_and_stop_releases_subscribers(
+    registry: Registry,
+    robot_manager: InMemoryRobotManager,
+    camera_manager: InMemoryCameraManager,
+    datasets_dir: Path,
+) -> None:
+    """Recorder opens every referenced CameraEntry via camera_manager.open and
+    drops its subscriber iterators on stop. This is the dual-pull contract:
+    robot_manager supplies motor state; camera_manager streams frames."""
+    cam_a = await _camera(registry, name="front")
+    cam_b = await _camera(registry, name="wrist")
+    robot = await _robot(registry, camera_ids=[cam_a.id, cam_b.id])
+    await robot_manager.connect(robot, [cam_a, cam_b])
+
+    svc = await _make_service(registry, robot_manager, camera_manager, datasets_dir)
+    session = await svc.start(
+        StartRequest(robot_id=robot.id, dataset_name="multicam", task_description="t", fps=15)
+    )
+
+    assert await camera_manager.is_open(cam_a.id)
+    assert await camera_manager.is_open(cam_b.id)
+    # Give the capture loop a moment to pull at least one frame from each
+    # iterator so subscriber counts rise above zero.
+    await asyncio.sleep(0.2)
+    status_a = await camera_manager.get_status(cam_a.id)
+    assert status_a.subscriber_count >= 1
+
+    await svc.stop(session.id, save=False)
+    status_a_after = await camera_manager.get_status(cam_a.id)
+    assert status_a_after.subscriber_count == 0
