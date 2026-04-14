@@ -146,6 +146,91 @@ export interface paths {
         patch: operations["update_robot_api_robots__robot_id__patch"];
         trace?: never;
     };
+    "/api/robots/{robot_id}/calibrate/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ack Calibration */
+        post: operations["ack_calibration_api_robots__robot_id__calibrate_ack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/robots/{robot_id}/calibrate/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Calibration */
+        post: operations["cancel_calibration_api_robots__robot_id__calibrate_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/robots/{robot_id}/calibrate/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Calibration */
+        post: operations["start_calibration_api_robots__robot_id__calibrate_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/robots/{robot_id}/calibrate/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Calibrate Status */
+        get: operations["calibrate_status_api_robots__robot_id__calibrate_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/robots/{robot_id}/calibration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest Calibration */
+        get: operations["latest_calibration_api_robots__robot_id__calibration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/robots/{robot_id}/connect": {
         parameters: {
             query?: never;
@@ -357,6 +442,98 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AckAccepted */
+        AckAccepted: {
+            /**
+             * Accepted
+             * @default true
+             * @constant
+             */
+            accepted: true;
+        };
+        /** CalibrationAckRequest */
+        CalibrationAckRequest: {
+            /** Session Id */
+            session_id: string;
+            /** Step Id */
+            step_id: string;
+        };
+        /** CalibrationCancelRequest */
+        CalibrationCancelRequest: {
+            /** Session Id */
+            session_id: string;
+        };
+        /**
+         * CalibrationConflict
+         * @description Response body for 409 conflicts (FE reads ``existing_session_id``/``current_step_id``).
+         */
+        CalibrationConflict: {
+            /** Current Step Id */
+            current_step_id?: string | null;
+            /** Detail */
+            detail: string;
+            /** Existing Session Id */
+            existing_session_id?: string | null;
+        };
+        /** CalibrationStartResponse */
+        CalibrationStartResponse: {
+            /** Robot Type */
+            robot_type: string;
+            /** Session Id */
+            session_id: string;
+            /** Step Ids */
+            step_ids: string[];
+            /** Total Steps */
+            total_steps: number;
+        };
+        /** CalibrationStatusResponse */
+        CalibrationStatusResponse: {
+            /** Awaiting User Input */
+            awaiting_user_input: boolean;
+            /** Progress */
+            progress: number;
+            /** Robot Type */
+            robot_type: string;
+            /** Session Id */
+            session_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Step Id */
+            step_id: string;
+            /** Step Index */
+            step_index: number;
+            /** Total Steps */
+            total_steps: number;
+        };
+        /**
+         * CalibrationSummary
+         * @description Persisted summary of the last completed calibration.
+         */
+        CalibrationSummary: {
+            /** Calibration Id */
+            calibration_id: string;
+            /**
+             * Completed At
+             * Format: date-time
+             */
+            completed_at: string;
+            /** Error */
+            error?: {
+                [key: string]: string;
+            } | null;
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "ok" | "error" | "cancelled";
+            /** Robot Type */
+            robot_type: string;
+            /** Step Ids */
+            step_ids: string[];
+        };
         /** CameraCreateRequest */
         CameraCreateRequest: {
             /**
@@ -478,6 +655,15 @@ export interface components {
             height?: number | null;
             /** Width */
             width?: number | null;
+        };
+        /** CancelAccepted */
+        CancelAccepted: {
+            /**
+             * Cancelled
+             * @default true
+             * @constant
+             */
+            cancelled: true;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1266,6 +1452,223 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RobotEntry"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ack_calibration_api_robots__robot_id__calibrate_ack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalibrationAckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckAccepted"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_calibration_api_robots__robot_id__calibrate_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalibrationCancelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelAccepted"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_calibration_api_robots__robot_id__calibrate_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationStartResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationConflict"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calibrate_status_api_robots__robot_id__calibrate_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationStatusResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_calibration_api_robots__robot_id__calibration_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                robot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationSummary"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationConflict"];
                 };
             };
             /** @description Validation Error */
