@@ -3,13 +3,18 @@ import { Activity, Cpu, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
-const NAV = [
+const BASE_NAV = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/robots", label: "Robots", icon: Cpu, end: false },
-  { to: "/benchmarks", label: "Benchmarks", icon: Activity, end: false },
 ];
 
 export function AppShell(): JSX.Element {
+  const benchmarksEnabled = import.meta.env.VITE_ENABLE_BENCHMARKS !== "0";
+
+  const nav = benchmarksEnabled
+    ? [...BASE_NAV, { to: "/benchmarks", label: "Benchmarks", icon: Activity, end: false }]
+    : BASE_NAV;
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
@@ -19,7 +24,7 @@ export function AppShell(): JSX.Element {
             <span className="text-xs text-muted-foreground">Dashboard</span>
           </div>
           <nav className="flex items-center gap-1" aria-label="Primary">
-            {NAV.map(({ to, label, icon: Icon, end }) => (
+            {nav.map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}
                 to={to}
