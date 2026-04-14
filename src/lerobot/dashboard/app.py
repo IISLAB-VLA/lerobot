@@ -16,6 +16,7 @@ from lerobot.dashboard.core.config import DashboardConfig
 from lerobot.dashboard.core.state import AppState
 from lerobot.dashboard.services.assets import RESOURCE_URL_PREFIX, AssetManager
 from lerobot.dashboard.services.camera_manager import InMemoryCameraManager, LerobotCameraManager
+from lerobot.dashboard.services.recorder import RecorderService
 from lerobot.dashboard.services.registry import Registry, registry_path_for
 from lerobot.dashboard.services.robot_manager import InMemoryRobotManager
 from lerobot.dashboard.services.robot_manager_impl import LerobotRobotManager
@@ -90,6 +91,12 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             registry=state.registry,
         )
     )
+    state.recorder = RecorderService(
+        registry=state.registry,
+        robot_manager=state.robot_manager,
+        camera_manager=state.camera_manager,
+        datasets_dir=resolved.resolved_dataset_dir(),
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -107,6 +114,8 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
             yield
         finally:
             logger.info("dashboard shutting down")
+            if state.recorder is not None:
+                await state.recorder.close()
             if state.streaming is not None:
                 await state.streaming.close_all()
 

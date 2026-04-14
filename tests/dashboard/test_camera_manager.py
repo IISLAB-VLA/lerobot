@@ -99,7 +99,7 @@ async def test_open_connects_camera_and_marks_online() -> None:
     assert cam.connected is True
     assert await mgr.is_open(entry.id) is True
     status = await mgr.get_status(entry.id)
-    assert status.open is True
+    assert status.online is True
     assert status.opened_at is not None
 
     await mgr.close(entry.id)
@@ -142,7 +142,7 @@ async def test_fan_out_broadcasts_to_all_subscribers() -> None:
     await mgr.close(entry.id)
 
     status_after = await mgr.get_status(entry.id)
-    assert status_after.open is False
+    assert status_after.online is False
 
 
 async def test_graceful_close_ends_subscriber_without_error() -> None:
@@ -185,7 +185,7 @@ async def test_fatal_capture_error_propagates_as_frame_source_error() -> None:
             await asyncio.wait_for(gen.__anext__(), timeout=1.0)
 
     status = await mgr.get_status(entry.id)
-    assert status.open is False
+    assert status.online is False
     assert status.last_error == "cable yanked"
     await mgr.close(entry.id)
 
@@ -216,7 +216,7 @@ async def test_double_open_is_idempotent() -> None:
     await mgr.open(entry)
     await mgr.open(entry)  # should not create a second slot / reconnect
     status = await mgr.get_status(entry.id)
-    assert status.open is True
+    assert status.online is True
     assert status.subscriber_count == 0
     await mgr.close(entry.id)
 
@@ -254,7 +254,7 @@ async def test_status_tracks_subscriber_count() -> None:
 
 def test_camera_status_defaults_are_offline() -> None:
     s = CameraStatus()
-    assert s.open is False
+    assert s.online is False
     assert s.opened_at is None
     assert s.last_error is None
     assert s.subscriber_count == 0

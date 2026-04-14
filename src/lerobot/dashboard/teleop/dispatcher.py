@@ -35,13 +35,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 from uuid import UUID
 
 from lerobot.dashboard.services.robot_manager import RobotManagerProtocol
 from lerobot.dashboard.teleop.adapters.base import SourceState, TeleopEventSource
 from lerobot.dashboard.teleop.deadman import DeadmanStateMachine
+from lerobot.dashboard.teleop.protocol import TeleopEvent
 from lerobot.dashboard.teleop.validator import ActionValidationError, ActionValidator
+
+if TYPE_CHECKING:
+    from lerobot.dashboard.services.teleop_manager import TeleopManagerProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +61,11 @@ class TeleopDispatcher:
         deadman: DeadmanStateMachine,
         *,
         clock: Callable[[], float] = time.monotonic,
+        teleop_manager: TeleopManagerProtocol | None = None,
+        teleop_id: UUID | None = None,
     ) -> None:
+        if (teleop_manager is None) ^ (teleop_id is None):
+            raise ValueError("teleop_manager and teleop_id must be provided together")
         self._robot_id = robot_id
         self._robot_manager = robot_manager
         self._validator = validator
@@ -65,6 +73,8 @@ class TeleopDispatcher:
         # Expose ms-resolution time to the validator while keeping the
         # injection point tiny for tests.
         self._clock = clock
+        self._teleop_manager = teleop_manager
+        self._teleop_id = teleop_id
         self._tasks: dict[int, asyncio.Task[None]] = {}
         self._sources: dict[int, TeleopEventSource] = {}
         self._closed = False
@@ -73,6 +83,8 @@ class TeleopDispatcher:
         self.forwarded: int = 0
         self.dropped_deadman: int = 0
         self.dropped_validation: int = 0
+        self.aux_events_forwarded: int = 0
+        self.aux_events_dropped: int = 0
 
     async def attach(self, source: TeleopEventSource) -> None:
         if self._closed:
@@ -145,3 +157,24 @@ class TeleopDispatcher:
             self.dropped_validation += 1
             return
         self.forwarded += 1
+
+    async def handle_event(self, event: TeleopEvent) -> None:
+        """Forward a raw input event (keyboard/mouse/gamepad) to the teleop manager.
+
+        The aux channel is a separate path from the joint-vector action
+        loop: a no-op if the dispatcher was constructed without a
+        ``teleop_manager`` (the WS handler only wires it when the session
+        negotiates a ``TeleopEntry``). Exceptions from the manager are
+        logged and counted — ``handle_input`` failure is not fatal to
+        the session.
+        """
+        if self._teleop_manager is None or self._teleop_id is None:
+            self.aux_events_dropped += 1
+            return
+        try:
+            await self._teleop_manager.handle_input(self._teleop_id, event)
+        except Exception:
+            logger.exception("teleop_manager.handle_input failed")
+            self.aux_events_dropped += 1
+            return
+        self.aux_events_forwarded += 1

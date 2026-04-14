@@ -13,9 +13,23 @@ from lerobot.dashboard.teleop.adapters.base import (
     SourceState,
     TeleopEventSource,
 )
+from lerobot.dashboard.teleop.adapters.gamepad import (
+    GamepadEventSource,
+    GamepadMapping,
+    LinearAxisMapping,
+)
+from lerobot.dashboard.teleop.adapters.leader_arm import (
+    LeaderArmEventSource,
+    TeleoperatorPoller,
+)
 
 __all__ = [
     "CallableLeaderSource",
+    "GamepadEventSource",
+    "GamepadMapping",
+    "LeaderArmEventSource",
+    "LinearAxisMapping",
     "SourceState",
     "TeleopEventSource",
+    "TeleoperatorPoller",
 ]

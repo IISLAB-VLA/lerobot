@@ -55,6 +55,21 @@ class RobotManagerProtocol(Protocol):
     async def read_observation(self, robot_id: UUID) -> dict[str, Any]:
         """Read the latest observation (joint positions, camera frames, …)."""
 
+    async def get_features(self, robot_id: UUID) -> dict[str, dict]:
+        """Return the hardware feature dicts for the attached :class:`Robot`.
+
+        The result has the form ``{"observation": {...}, "action": {...}}``
+        using the same ``float | tuple`` value convention as
+        :pyattr:`Robot.observation_features` / :pyattr:`Robot.action_features`.
+        Downstream consumers (dataset recorder, VLA inference) feed this
+        into :func:`lerobot.utils.feature_utils.hw_to_dataset_features` to
+        derive the LeRobotDataset feature spec.
+
+        Empty dicts are acceptable when the adapter has no hardware bound
+        (fake-devices mode); the recorder records an empty-frame dataset so
+        the UI flow is still exercisable without a real robot.
+        """
+
 
 @dataclass(slots=True)
 class _LiveSlot:
@@ -127,3 +142,12 @@ class InMemoryRobotManager:
                 "timestamp": datetime.now(UTC).isoformat(),
                 "joints": {},
             }
+
+    async def get_features(self, robot_id: UUID) -> dict[str, dict]:
+        async with self._lock:
+            slot = self._slots.get(robot_id)
+            if slot is None:
+                return {"observation": {}, "action": {}}
+            # Fake-devices mode has no real joints; return empty feature dicts
+            # so the recorder can still exercise its end-to-end flow.
+            return {"observation": {}, "action": {}}
