@@ -162,6 +162,13 @@ export function RobotInferencePage(): JSX.Element {
       (activeSession.status === "running" || activeSession.status === "starting"),
   );
 
+  // Destructure `mutate` so the effect dep is a stable function reference.
+  // The full `deadmanMutation` object gets a new identity on every mutation
+  // state change (pending → success → idle), which would cause this effect
+  // to re-run, clean up (spuriously calling mutate(false)), and loop until
+  // React Error #185 (Maximum update depth exceeded).
+  const { mutate: mutateDeadman } = deadmanMutation;
+
   useEffect(() => {
     if (!deadmanActive) return undefined;
     const isEditable = (target: EventTarget | null) => {
@@ -174,13 +181,13 @@ export function RobotInferencePage(): JSX.Element {
       if (event.code !== "Space" || event.repeat) return;
       if (isEditable(event.target)) return;
       event.preventDefault();
-      if (!deadmanHeld) deadmanMutation.mutate(true);
+      if (!deadmanHeld) mutateDeadman(true);
     };
     const onKeyUp = (event: KeyboardEvent) => {
       if (event.code !== "Space") return;
       if (isEditable(event.target)) return;
       event.preventDefault();
-      if (deadmanHeld) deadmanMutation.mutate(false);
+      if (deadmanHeld) mutateDeadman(false);
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -188,9 +195,9 @@ export function RobotInferencePage(): JSX.Element {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       // Release if we navigate away or the session ends mid-hold so the loop pauses cleanly.
-      if (deadmanHeld) deadmanMutation.mutate(false);
+      if (deadmanHeld) mutateDeadman(false);
     };
-  }, [deadmanActive, deadmanHeld, deadmanMutation]);
+  }, [deadmanActive, deadmanHeld, mutateDeadman]);
 
   if (robotsQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading robot…</p>;
