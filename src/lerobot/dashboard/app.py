@@ -19,6 +19,8 @@ from lerobot.dashboard.services.benchmark import (
     BENCHMARK_RESOURCE_URL_PREFIX,
     BenchmarkController,
 )
+from lerobot.dashboard.services.benchmark_runners import PolicyDispatchRunner
+from lerobot.dashboard.services.policy_loader import PolicyCache
 from lerobot.dashboard.services.calibration import CalibrationController
 from lerobot.dashboard.services.camera_manager import InMemoryCameraManager, LerobotCameraManager
 from lerobot.dashboard.services.recorder import RecorderService
@@ -87,7 +89,11 @@ def create_app(config: DashboardConfig | None = None) -> FastAPI:
         state.camera_manager = LerobotCameraManager()
     state.teleop_manager = InMemoryTeleopManager()
     state.calibration = CalibrationController()
-    state.benchmark = BenchmarkController(storage_dir=resolved.storage_dir / "benchmarks")
+    state.policy_cache = PolicyCache()
+    state.benchmark = BenchmarkController(
+        storage_dir=resolved.storage_dir / "benchmarks",
+        runner=PolicyDispatchRunner(state.policy_cache),
+    )
     # Streaming bridges the camera_manager's ``subscribe()`` into the
     # WebRTC track. In ``fake_devices`` mode ``state.camera_manager`` is
     # the in-memory fallback so the wiring still succeeds — frames are

@@ -9,12 +9,15 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pyarrow.parquet as pq
 import pytest
 
 from lerobot.dashboard.services.benchmark_runners import (
+    PolicyDispatchRunner,
+    PolicyEnvRunner,
     RandomActionEnvRunner,
     TrajectoryWriter,
 )
@@ -314,6 +317,100 @@ async def test_runner_obs_jpg_path_null_when_no_image_in_obs(tmp_path: Path) -> 
     assert all(p is None for p in table.column("obs_jpg_path").to_pylist())
     # No observations directory should be created.
     assert not (tmp_path / "observations").exists()
+
+
+async def test_policy_runner_uses_select_action(tmp_path: Path) -> None:
+    """PolicyEnvRunner calls policy.select_action instead of action_space.sample."""
+    import torch
+
+    actions_recorded: list[Any] = []
+
+    class _FakePolicy:
+        def eval(self) -> "_FakePolicy":
+            return self
+
+        def select_action(self, obs_dict: dict) -> Any:
+            # Return a fixed action tensor (1, action_dim).
+            return torch.zeros(1, 2)
+
+    class _TrackingFakePolicy(_FakePolicy):
+        def select_action(self, obs_dict: dict) -> Any:
+            action = super().select_action(obs_dict)
+            actions_recorded.append(action.numpy().tolist())
+            return action
+
+    async def _fake_loader(repo_id: str) -> _TrackingFakePolicy:
+        return _TrackingFakePolicy()
+
+    from lerobot.dashboard.services.policy_loader import PolicyCache
+
+    cache = PolicyCache(loader=lambda repo_id: _TrackingFakePolicy())
+    run = _RunShim(
+        run_id="run-policy",
+        env_name="pusht",
+        episodes=1,
+        seed=0,
+        storage_dir=tmp_path,
+    )
+    captured: list[dict] = []
+
+    async def publish(_run: _RunShim, event: dict) -> None:
+        captured.append(event)
+
+    def _factory(env_name: str) -> dict:
+        return {env_name: {0: _FakeVecEnv(action_dim=2, terminate_at=3)}}
+
+    runner = PolicyEnvRunner(
+        policy_cache=cache,
+        repo_id="test/my_policy",
+        env_factory=_factory,
+        max_steps_per_episode=10,
+    )
+    await runner(run, publish)
+
+    # Policy slug should reflect the repo_id tail.
+    step_events = [e for e in captured if e["type"] == "step"]
+    assert all(e["policy_slug"] == "my_policy" for e in step_events)
+    assert len(step_events) == 3
+    # select_action was called instead of action_space.sample.
+    assert len(actions_recorded) == 3
+
+    table = pq.read_table(tmp_path / "trajectory.parquet")
+    assert table.num_rows == 3
+    # All action values should be 0.0 (from _TrackingFakePolicy).
+    assert all(v == pytest.approx(0.0) for v in table.column("action_a0").to_pylist())
+
+
+async def test_dispatch_runner_uses_random_when_no_policy_refs(tmp_path: Path) -> None:
+    """PolicyDispatchRunner falls back to RandomActionEnvRunner when policy_refs=[]."""
+    from lerobot.dashboard.services.policy_loader import PolicyCache
+
+    cache = PolicyCache(loader=lambda repo_id: None)
+    run = _RunShim(
+        run_id="run-disp-rand",
+        env_name="pusht",
+        episodes=1,
+        seed=0,
+        storage_dir=tmp_path,
+    )
+    # policy_refs defaults to [] in _RunShim (dataclass doesn't declare it, so test via getattr)
+    # We add it explicitly to simulate BenchmarkController's _Run.
+    run.__dict__["policy_refs"] = []  # type: ignore[attr-defined]
+
+    captured: list[dict] = []
+
+    async def publish(_run: _RunShim, event: dict) -> None:
+        captured.append(event)
+
+    dispatcher = PolicyDispatchRunner(
+        policy_cache=cache,
+        env_factory=_fake_factory,
+    )
+    await dispatcher(run, publish)
+
+    step_events = [e for e in captured if e["type"] == "step"]
+    assert len(step_events) == 3
+    assert all(e["policy_slug"] == "random" for e in step_events)
 
 
 async def test_runner_honours_cancellation_between_steps(tmp_path: Path) -> None:

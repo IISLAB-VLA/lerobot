@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from lerobot.dashboard.services.benchmark import BenchmarkController
     from lerobot.dashboard.services.calibration import CalibrationController
     from lerobot.dashboard.services.camera_manager import CameraManagerProtocol
+    from lerobot.dashboard.services.policy_loader import PolicyCache
     from lerobot.dashboard.services.recorder import RecorderService
     from lerobot.dashboard.services.registry import Registry
     from lerobot.dashboard.services.robot_manager import RobotManagerProtocol
@@ -39,6 +40,7 @@ class AppState:
     assets: AssetManager | None = None
     calibration: CalibrationController | None = None
     benchmark: BenchmarkController | None = None
+    policy_cache: PolicyCache | None = None
     live_robots: dict[str, Any] = field(default_factory=dict)
     live_cameras: dict[str, Any] = field(default_factory=dict)
     live_teleops: dict[str, Any] = field(default_factory=dict)
