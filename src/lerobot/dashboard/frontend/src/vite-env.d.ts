@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_TELEOP?: string;
   readonly VITE_ENABLE_RECORDING?: string;
   readonly VITE_ENABLE_INFERENCE?: string;
+  readonly VITE_ENABLE_BENCHMARKS?: string;
 }
 
 interface ImportMeta {
