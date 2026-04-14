@@ -110,6 +110,7 @@ class ClientFrameType(str, enum.Enum):
     DEADMAN = "deadman"
     HEARTBEAT = "heartbeat"
     MODE = "mode"
+    INPUT = "input"
 
 
 class ServerFrameType(str, enum.Enum):

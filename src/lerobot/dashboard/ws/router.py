@@ -16,11 +16,14 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from lerobot.dashboard.ws.teleop import build_teleop_ws_router
+
 logger = logging.getLogger(__name__)
 
 
 def build_ws_router() -> APIRouter:
     router = APIRouter(prefix="/ws")
+    router.include_router(build_teleop_ws_router())
 
     @router.websocket("/events")
     async def events(websocket: WebSocket) -> None:
