@@ -100,7 +100,7 @@ async def test_open_connects_camera_and_marks_online() -> None:
     assert await mgr.is_open(entry.id) is True
     status = await mgr.get_status(entry.id)
     assert status.online is True
-    assert status.onlineed_at is not None
+    assert status.opened_at is not None
 
     await mgr.close(entry.id)
     assert cam.connected is False
