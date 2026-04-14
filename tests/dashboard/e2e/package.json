@@ -1,0 +1,19 @@
+{
+  "name": "lerobot-dashboard-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Playwright E2E + gemini-vision visual regression for lerobot dashboard",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "install-browsers": "playwright install chromium --with-deps",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "@types/node": "^22.5.0",
+    "typescript": "^5.5.0"
+  }
+}
