@@ -195,6 +195,17 @@ export function RobotInferencePage(): JSX.Element {
   if (robotsQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading robot…</p>;
   }
+  if (robotsQuery.isError) {
+    return (
+      <div
+        role="alert"
+        className="rounded-md border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive"
+      >
+        Failed to load robots:{" "}
+        {robotsQuery.error instanceof Error ? robotsQuery.error.message : "unknown error"}
+      </div>
+    );
+  }
   if (!robot) {
     return (
       <div className="space-y-3">

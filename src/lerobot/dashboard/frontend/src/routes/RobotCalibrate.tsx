@@ -30,6 +30,14 @@ export function RobotCalibratePage(): JSX.Element {
   if (robotsQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading robot…</p>;
   }
+  if (robotsQuery.isError) {
+    return (
+      <ErrorBlock
+        message={`Failed to load robots: ${robotsQuery.error instanceof Error ? robotsQuery.error.message : "unknown error"}`}
+        backLink
+      />
+    );
+  }
   if (!robot) return <ErrorBlock message="Robot not found." backLink />;
 
   const progressPct =
