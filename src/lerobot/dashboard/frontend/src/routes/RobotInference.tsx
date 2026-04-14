@@ -162,6 +162,17 @@ export function RobotInferencePage(): JSX.Element {
       (activeSession.status === "running" || activeSession.status === "starting"),
   );
 
+  // Keep a ref to the stable mutate function so the cleanup can call it without
+  // putting the entire deadmanMutation object in the effect deps. Including the
+  // full useMutation result in deps would cause the effect to re-run on every
+  // mutation state change (pending → success → idle), which triggers the cleanup
+  // while deadmanHeld is still true, creating an infinite mutate(false) cascade
+  // that ends in React Error #185 (maximum update depth exceeded).
+  const deadmanMutateRef = useRef(deadmanMutation.mutate);
+  useEffect(() => {
+    deadmanMutateRef.current = deadmanMutation.mutate;
+  });
+
   useEffect(() => {
     if (!deadmanActive) return undefined;
     const isEditable = (target: EventTarget | null) => {
@@ -174,13 +185,13 @@ export function RobotInferencePage(): JSX.Element {
       if (event.code !== "Space" || event.repeat) return;
       if (isEditable(event.target)) return;
       event.preventDefault();
-      if (!deadmanHeld) deadmanMutation.mutate(true);
+      if (!deadmanHeld) deadmanMutateRef.current(true);
     };
     const onKeyUp = (event: KeyboardEvent) => {
       if (event.code !== "Space") return;
       if (isEditable(event.target)) return;
       event.preventDefault();
-      if (deadmanHeld) deadmanMutation.mutate(false);
+      if (deadmanHeld) deadmanMutateRef.current(false);
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -188,9 +199,10 @@ export function RobotInferencePage(): JSX.Element {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       // Release if we navigate away or the session ends mid-hold so the loop pauses cleanly.
-      if (deadmanHeld) deadmanMutation.mutate(false);
+      if (deadmanHeld) deadmanMutateRef.current(false);
     };
-  }, [deadmanActive, deadmanHeld, deadmanMutation]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deadmanActive, deadmanHeld]);
 
   if (robotsQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading robot…</p>;
