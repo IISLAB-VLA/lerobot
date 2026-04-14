@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
@@ -19,6 +19,7 @@ import {
 } from "@/components/streaming/layouts";
 import { StreamLayout } from "@/components/streaming/StreamLayout";
 import { useStreamStageShortcuts } from "@/hooks/useStreamStageShortcuts";
+import { useStreamStats } from "@/hooks/useStreamStats";
 import { TeleopPanel } from "@/components/teleop/TeleopPanel";
 import { StartRecordingModal } from "@/components/recording/StartRecordingModal";
 import { RecordingIndicator } from "@/components/recording/RecordingIndicator";
@@ -39,6 +40,10 @@ export function RobotDetailPage(): JSX.Element {
   const [layout, setLayout] = useState<StreamLayoutKind>("single");
   const [spotlightCameraId, setSpotlightCameraId] = useState<string | null>(null);
   const [streamsEnabled, setStreamsEnabled] = useState(true);
+  const [showStats, setShowStats] = useState(false);
+  const [cameraSessions, setCameraSessions] = useState<Map<string, string>>(
+    () => new Map(),
+  );
   const [recordingOpen, setRecordingOpen] = useState(false);
   const [activeRecording, setActiveRecording] = useState<RecordingSession | null>(null);
   const [finishedRecording, setFinishedRecording] = useState<RecordingSession | null>(null);
@@ -87,6 +92,52 @@ export function RobotDetailPage(): JSX.Element {
     tileCount: cameras.length,
     onLayoutChange: setLayout,
     enabled: cameras.length > 0,
+  });
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        if (target.isContentEditable) return;
+      }
+      if (event.key === "i" || event.key === "I") {
+        event.preventDefault();
+        setShowStats((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const handleSessionChange = useCallback(
+    (cameraId: string, sessionId: string | null) => {
+      setCameraSessions((prev) => {
+        const current = prev.get(cameraId) ?? null;
+        if (current === sessionId) return prev;
+        const next = new Map(prev);
+        if (sessionId === null) {
+          next.delete(cameraId);
+        } else {
+          next.set(cameraId, sessionId);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const sessionIds = useMemo(
+    () => Array.from(cameraSessions.values()),
+    [cameraSessions],
+  );
+
+  const streamStats = useStreamStats({
+    sessionIds,
+    enabled: showStats && sessionIds.length > 0,
   });
 
   if (robotsQuery.isLoading) {
@@ -233,6 +284,10 @@ export function RobotDetailPage(): JSX.Element {
           spotlightCameraId={spotlightCameraId}
           onSpotlightChange={setSpotlightCameraId}
           enabled={streamsEnabled && statusKind === "online"}
+          showStats={showStats}
+          statsBySessionId={streamStats.byId}
+          cameraToSession={cameraSessions}
+          onSessionChange={handleSessionChange}
         />
       </section>
 
@@ -245,6 +300,7 @@ export function RobotDetailPage(): JSX.Element {
         <p className="text-xs text-muted-foreground">
           Shortcuts — <kbd className="rounded border px-1">1</kbd>…<kbd className="rounded border px-1">5</kbd> layout,{" "}
           <kbd className="rounded border px-1">F</kbd> fullscreen,{" "}
+          <kbd className="rounded border px-1">I</kbd> toggle stats,{" "}
           <kbd className="rounded border px-1">Esc</kbd> exit fullscreen.
         </p>
       )}
