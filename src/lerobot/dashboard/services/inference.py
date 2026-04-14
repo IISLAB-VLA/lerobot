@@ -94,7 +94,14 @@ class PolicyDescriptor(BaseModel):
 
 
 class StartRequest(BaseModel):
-    """Payload accepted by :meth:`InferenceService.start`."""
+    """Payload accepted by :meth:`InferenceService.start`.
+
+    ``max_action_magnitude`` and ``deadman_required`` are per-session
+    safety knobs layered on top of adapter-level clamps (e.g. UR's
+    ``max_relative_target``). The adapter limits stay in place as the
+    hardware-protection floor; these knobs are the operator's "policy
+    operating envelope" that can be tightened per run.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -103,6 +110,23 @@ class StartRequest(BaseModel):
     fps: int = Field(..., ge=1, le=240)
     task_description: str = Field(default="", max_length=500)
     dry_run: bool = False
+    max_action_magnitude: float | None = Field(
+        default=None,
+        gt=0.0,
+        description=(
+            "Absolute cap applied to each element of the policy's action "
+            "vector before ``send_action``. ``None`` means no session-level cap "
+            "(adapter safety clamps still apply)."
+        ),
+    )
+    deadman_required: bool = Field(
+        default=False,
+        description=(
+            "When True the loop skips ``send_action`` unless the operator "
+            "is actively holding the deadman (see ``set_deadman``). Dry-run "
+            "sessions ignore this field."
+        ),
+    )
 
 
 class InferenceSession(BaseModel):
@@ -122,6 +146,10 @@ class InferenceSession(BaseModel):
     started_at: datetime
     stopped_at: datetime | None = None
     error: str | None = None
+    max_action_magnitude: float | None = None
+    deadman_required: bool = False
+    deadman_held: bool = False
+    suppressed_steps: int = 0
 
 
 class StepEvent(BaseModel):
@@ -388,6 +416,8 @@ class InferenceService:
                 task_description=req.task_description,
                 status="starting",
                 started_at=datetime.now(UTC),
+                max_action_magnitude=req.max_action_magnitude,
+                deadman_required=req.deadman_required,
             )
             session = _Session(model=model, robot_entry=robot, cameras=cameras)
             self._sessions[model.id] = session
@@ -448,6 +478,20 @@ class InferenceService:
             ),
         )
         return session.model.model_copy()
+
+    async def set_deadman(self, session_id: UUID, held: bool) -> InferenceSession:
+        """Arm or release the session's deadman gate.
+
+        ``deadman_required=True`` sessions only forward ``send_action`` while
+        ``held=True``. Calling this on a session that didn't opt into the
+        gate is a no-op (except for recording the current state).
+        """
+        session = self._require(session_id)
+        async with session.lock:
+            if session.model.status in _TERMINAL_STATUSES:
+                raise InferenceConflictError(f"session {session_id} is already {session.model.status}")
+            session.model = session.model.model_copy(update={"deadman_held": bool(held)})
+            return session.model.model_copy()
 
     async def set_command(self, session_id: UUID, text: str) -> InferenceSession:
         session = self._require(session_id)
@@ -558,14 +602,28 @@ class InferenceService:
         latency_ms = (time.monotonic() - t0) * 1000.0
 
         action_dict = _tensor_to_action_dict(action_tensor, policy)
-        if not session.model.dry_run and action_dict:
+        if session.model.max_action_magnitude is not None and action_dict:
+            action_dict = _clamp_action(action_dict, session.model.max_action_magnitude)
+
+        suppressed = False
+        should_send = (
+            not session.model.dry_run
+            and action_dict
+            and (not session.model.deadman_required or session.model.deadman_held)
+        )
+        if should_send:
             try:
                 await self._robot_manager.send_action(session.model.robot_id, action_dict)
             except Exception as exc:
                 logger.warning("send_action failed: %s", exc)
+        elif not session.model.dry_run and session.model.deadman_required and not session.model.deadman_held:
+            suppressed = True
 
         async with session.lock:
-            session.model = session.model.model_copy(update={"last_latency_ms": latency_ms})
+            update: dict[str, Any] = {"last_latency_ms": latency_ms}
+            if suppressed:
+                update["suppressed_steps"] = session.model.suppressed_steps + 1
+            session.model = session.model.model_copy(update=update)
             subscriber_snapshot = list(session.subscribers)
         event = StepEvent(
             step=session.model.step,
@@ -729,6 +787,17 @@ def _action_list(action: Any) -> list[float]:
     flat: list[float] = []
     _flatten(values, flat)
     return flat
+
+
+def _clamp_action(action: dict[str, float], limit: float) -> dict[str, float]:
+    """Clamp each element of ``action`` to ``[-limit, +limit]``.
+
+    Applied on top of the adapter-level safety clamp (``max_relative_target``
+    etc.) so the operator can tighten the operating envelope per session
+    without touching adapter config.
+    """
+    bound = float(limit)
+    return {k: max(-bound, min(bound, float(v))) for k, v in action.items()}
 
 
 def _flatten(obj: Any, out: list[float]) -> None:

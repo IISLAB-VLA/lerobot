@@ -15,17 +15,21 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import suppress
 from uuid import UUID
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
+from lerobot.dashboard.services.benchmark import RunNotFoundError
+from lerobot.dashboard.services.calibration import SessionNotFoundError
+from lerobot.dashboard.services.inference import (
+    InferenceNotFoundError,
+    InferenceService,
+)
 from lerobot.dashboard.services.recorder import (
     RecorderNotFoundError,
     RecorderService,
 )
-
-from lerobot.dashboard.services.benchmark import RunNotFoundError
-from lerobot.dashboard.services.calibration import SessionNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -78,14 +82,10 @@ def build_ws_router() -> APIRouter:
             await websocket.send_json({"type": "error", "message": str(exc)})
         finally:
             drain.cancel()
-            try:
+            with suppress(asyncio.CancelledError, Exception):
                 await drain
-            except (asyncio.CancelledError, Exception):
-                pass
-            try:
+            with suppress(Exception):
                 await websocket.close()
-            except Exception:
-                pass
 
     @router.websocket("/recordings/{session_id}")
     async def recordings(websocket: WebSocket, session_id: UUID) -> None:
@@ -139,5 +139,22 @@ def build_ws_router() -> APIRouter:
                 await websocket.close()
             except Exception:
                 pass
+
+    @router.websocket("/inference/{session_id}")
+    async def inference(websocket: WebSocket, session_id: UUID) -> None:
+        """Forward :class:`StepEvent` payloads to a browser subscriber."""
+        service: InferenceService | None = getattr(websocket.app.state.dashboard, "inference", None)
+        if service is None:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            return
+        await websocket.accept()
+        try:
+            async for event in service.subscribe(session_id):
+                await websocket.send_json(event.model_dump(mode="json"))
+        except InferenceNotFoundError:
+            await websocket.send_json({"type": "error", "message": "session not found"})
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        except WebSocketDisconnect:
+            logger.debug("inference ws disconnected (%s)", session_id)
 
     return router
